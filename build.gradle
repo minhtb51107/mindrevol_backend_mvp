@@ -1,0 +1,117 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.6'
+	id 'io.spring.dependency-management' version '1.1.7'
+	id 'eclipse'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+description = 'Demo project for Spring Boot'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+ext {
+	mapstructVersion = '1.5.5.Final'
+	lombokMapstructBindingVersion = '0.2.0'
+}
+
+dependencies {
+	// --- Spring Boot ---
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+	// --- Lombok ---
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+
+	// --- MapStruct ---
+	implementation "org.mapstruct:mapstruct:${mapstructVersion}"
+	annotationProcessor "org.mapstruct:mapstruct-processor:${mapstructVersion}"
+	// Binding để Lombok và MapStruct hoạt động cùng nhau
+	annotationProcessor "org.projectlombok:lombok-mapstruct-binding:${lombokMapstructBindingVersion}"
+
+
+	// --- DB & Dev ---
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+	runtimeOnly 'org.postgresql:postgresql'
+
+	// --- JWT ---
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+	// --- Test ---
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.security:spring-security-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+    
+    // JUnit 5
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
+
+    // Mockito
+	testImplementation("org.mockito:mockito-core:5.18.0")
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
+    
+    implementation 'org.liquibase:liquibase-core'
+    
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    
+	// Google API Client for OAuth2
+	implementation 'com.google.api-client:google-api-client:2.3.0'
+    implementation 'com.google.oauth-client:google-oauth-client-jetty:1.35.0'
+    implementation 'com.google.http-client:google-http-client-jackson2:1.45.1'
+    
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+// Cấu hình trình biên dịch Java để tích hợp MapStruct và Lombok
+tasks.withType(JavaCompile).configureEach {
+    options.getCompilerArgs().addAll([
+            '-Amapstruct.defaultComponentModel=spring',
+			'-Amapstruct.unmappedTargetPolicy=IGNORE'
+    ])
+}
+
+// Cấu hình để Gradle tự động tạo file .classpath cho Eclipse/STS
+eclipse {
+    classpath {
+        file {
+            whenMerged {
+                def generatedSrcDir = file('build/generated/sources/annotationProcessor/java/main')
+                if (generatedSrcDir.exists()) {
+                    entries.add(new org.gradle.plugins.ide.eclipse.model.SourceFolder(generatedSrcDir.path, null))
+                }
+            }
+        }
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
