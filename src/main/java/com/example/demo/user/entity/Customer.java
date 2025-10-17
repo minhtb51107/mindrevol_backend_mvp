@@ -1,3 +1,5 @@
+// File: src/main/java/com/example/demo/user/entity/Customer.java (Bản sửa lỗi cuối cùng)
+
 package com.example.demo.user.entity;
 
 import jakarta.persistence.*;
@@ -16,15 +18,16 @@ public class Customer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    // Quan hệ 1-1, user_id là khóa ngoại và là duy nhất
-    @OneToOne(fetch = FetchType.LAZY) // <-- XÓA BỎ cascade = CascadeType.ALL
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", referencedColumnName = "id", nullable = false, unique = true)
     private User user;
 
-    @Column(name = "fullname", nullable = false, length = 100)
+    // SỬA LỖI Ở ĐÂY: Ánh xạ tường minh tới cột "full_name"
+    @Column(name = "full_name", nullable = false, length = 100)
     private String fullname;
 
-    @Column(name = "phone_number", unique = true, length = 20) // Xóa nullable = false
+    // SỬA LỖI Ở ĐÂY: Ánh xạ tường minh tới cột "phone_number"
+    @Column(name = "phone_number", unique = true, length = 20)
     private String phoneNumber;
 
     @Column(name = "photo", length = 255)

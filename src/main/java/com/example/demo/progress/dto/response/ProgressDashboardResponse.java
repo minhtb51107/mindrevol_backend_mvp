@@ -22,7 +22,7 @@ public class ProgressDashboardResponse {
         private String userFullName;
         private int completedDays;
         private double completionPercentage;
-        // Map<Ngày, Trạng thái hoàn thành>
-        private Map<String, Boolean> dailyStatus;
+        // THAY ĐỔI DÒNG DƯỚI ĐÂY
+        private Map<String, DailyProgressSummaryResponse> dailyStatus; // <-- TỪ Boolean SANG DailyProgressSummaryResponse
     }
 }

@@ -1,6 +1,7 @@
 package com.example.demo.progress.mapper;
 
 import com.example.demo.progress.dto.response.DailyProgressResponse;
+import com.example.demo.progress.dto.response.DailyProgressSummaryResponse;
 import com.example.demo.progress.entity.DailyProgress;
 import org.springframework.stereotype.Component;
 
@@ -91,5 +92,23 @@ public class ProgressMapper {
         if (user.getCustomer() != null) return user.getCustomer().getFullname();
         if (user.getEmployee() != null) return user.getEmployee().getFullname();
         return user.getEmail();
+    }
+    
+    public DailyProgressSummaryResponse toDailyProgressSummaryResponse(DailyProgress dailyProgress, Integer currentUserId) {
+        if (dailyProgress == null) {
+            return null;
+        }
+
+        // Tận dụng lại hàm toDailyProgressResponse đã có để lấy comments và reactions
+        DailyProgressResponse tempResponse = toDailyProgressResponse(dailyProgress, currentUserId);
+
+        return DailyProgressSummaryResponse.builder()
+                .id(dailyProgress.getId())
+                .completed(dailyProgress.isCompleted())
+                .notes(dailyProgress.getNotes())
+                .evidence(dailyProgress.getEvidence())
+                .comments(tempResponse.getComments())
+                .reactions(tempResponse.getReactions())
+                .build();
     }
 }

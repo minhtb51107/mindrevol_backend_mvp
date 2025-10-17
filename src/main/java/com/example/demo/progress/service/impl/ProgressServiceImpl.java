@@ -6,6 +6,7 @@ import com.example.demo.plan.repository.PlanMemberRepository;
 import com.example.demo.plan.repository.PlanRepository;
 import com.example.demo.progress.dto.request.LogProgressRequest;
 import com.example.demo.progress.dto.response.DailyProgressResponse;
+import com.example.demo.progress.dto.response.DailyProgressSummaryResponse;
 import com.example.demo.progress.dto.response.ProgressDashboardResponse;
 import com.example.demo.progress.entity.DailyProgress;
 import com.example.demo.progress.mapper.ProgressMapper;
@@ -106,7 +107,8 @@ public class ProgressServiceImpl implements ProgressService {
         }
 
         List<ProgressDashboardResponse.MemberProgressResponse> membersProgress = plan.getMembers().stream()
-                .map(member -> buildMemberProgress(member, plan))
+                // SỬA DÒNG DƯỚI ĐÂY
+                .map(member -> buildMemberProgress(member, plan, user.getId())) // <-- Truyền user.getId() vào
                 .collect(Collectors.toList());
 
         return ProgressDashboardResponse.builder()
@@ -115,34 +117,39 @@ public class ProgressServiceImpl implements ProgressService {
                 .build();
     }
 
-    private ProgressDashboardResponse.MemberProgressResponse buildMemberProgress(PlanMember member, Plan plan) {
+ // THAY THẾ TOÀN BỘ HÀM NÀY
+    private ProgressDashboardResponse.MemberProgressResponse buildMemberProgress(PlanMember member, Plan plan, Integer currentUserId) {
         List<DailyProgress> allProgress = member.getDailyProgressList();
-        
-        long completedDays = allProgress.stream().filter(DailyProgress::isCompleted).count();
-        double completionPercentage = (double) completedDays / plan.getDurationInDays() * 100;
 
-     // **[THAY ĐỔI]** Sử dụng startDate thay vì createdAt
+        long completedDays = allProgress.stream().filter(DailyProgress::isCompleted).count();
+        double completionPercentage = (plan.getDurationInDays() > 0) ? ((double) completedDays / plan.getDurationInDays() * 100) : 0;
+
         LocalDate planStartDate = plan.getStartDate();
-        
-        // Dùng LinkedHashMap để giữ đúng thứ tự ngày
-        Map<String, Boolean> dailyStatus = IntStream.range(0, plan.getDurationInDays())
+
+        // Tạo một Map từ ngày -> đối tượng DailyProgress tương ứng
+        Map<LocalDate, DailyProgress> progressByDate = allProgress.stream()
+                .collect(Collectors.toMap(DailyProgress::getDate, p -> p));
+
+        Map<String, DailyProgressSummaryResponse> dailyStatus = IntStream.range(0, plan.getDurationInDays())
             .mapToObj(planStartDate::plusDays)
             .collect(Collectors.toMap(
                 LocalDate::toString,
-                date -> allProgress.stream()
-                        .filter(p -> p.getDate().equals(date) && p.isCompleted())
-                        .findFirst()
-                        .isPresent(),
-                (v1, v2) -> v1, // merge function in case of duplicates
+                date -> {
+                    // Lấy đối tượng DailyProgress cho ngày này
+                    DailyProgress progress = progressByDate.get(date);
+                    // Dùng mapper để chuyển đổi sang DTO chi tiết
+                    return progressMapper.toDailyProgressSummaryResponse(progress, currentUserId);
+                },
+                (v1, v2) -> v1,
                 LinkedHashMap::new
             ));
-        
+
         return ProgressDashboardResponse.MemberProgressResponse.builder()
                 .userEmail(member.getUser().getEmail())
                 .userFullName(getUserFullName(member.getUser()))
                 .completedDays((int) completedDays)
                 .completionPercentage(completionPercentage)
-                .dailyStatus(dailyStatus)
+                .dailyStatus(dailyStatus) // Bây giờ map này chứa đầy đủ thông tin
                 .build();
     }
     
