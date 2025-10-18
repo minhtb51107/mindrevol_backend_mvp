@@ -1,3 +1,5 @@
+// File: src/main/java/com/example/demo/config/security/JwtAuthenticationFilter.java (ĐÃ SỬA LỖI)
+
 package com.example.demo.config.security;
 
 import com.example.demo.shared.util.JwtUtil;
@@ -32,6 +34,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
+        final String requestURI = request.getRequestURI();
+
+        // *** THÊM LOGIC KIỂM TRA ĐỂ BỎ QUA ENDPOINT REFRESH TOKEN ***
+        if (request.getServletPath().equals("/api/v1/auth/refresh-token")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         // Bỏ qua nếu không có header Authorization hoặc không bắt đầu bằng "Bearer "
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {

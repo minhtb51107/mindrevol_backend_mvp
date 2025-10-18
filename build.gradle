@@ -93,8 +93,9 @@ tasks.named('test') {
 // Cấu hình trình biên dịch Java để tích hợp MapStruct và Lombok
 tasks.withType(JavaCompile).configureEach {
     options.getCompilerArgs().addAll([
+            '-parameters', // <--- THÊM DÒNG NÀY
             '-Amapstruct.defaultComponentModel=spring',
-			'-Amapstruct.unmappedTargetPolicy=IGNORE'
+            '-Amapstruct.unmappedTargetPolicy=IGNORE'
     ])
 }
 

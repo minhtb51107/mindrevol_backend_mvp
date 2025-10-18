@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections; // <-- THÊM IMPORT NÀY
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,8 +54,9 @@ public class ProgressServiceImpl implements ProgressService {
      // **[LOGIC MỚI]** Ngăn chặn gian lận và kiểm tra ngày hợp lệ
         validateCheckinDate(request.getDate(), plan);
 
-        // Validate ngày check-in
-        LocalDate planStartDate = plan.getCreatedAt().toLocalDate();
+        // Validate ngày check-in (Đoạn này bị lặp lại, bạn có thể xóa nếu validateCheckinDate đã đủ)
+        // LocalDate planStartDate = plan.getCreatedAt().toLocalDate(); // Dòng này có vẻ sai, nên dùng plan.getStartDate()
+        LocalDate planStartDate = plan.getStartDate();
         if (request.getDate().isBefore(planStartDate) || request.getDate().isAfter(planStartDate.plusDays(plan.getDurationInDays() - 1))) {
             throw new BadRequestException("Ngày check-in không nằm trong thời gian diễn ra kế hoạch.");
         }
@@ -72,7 +74,6 @@ public class ProgressServiceImpl implements ProgressService {
         return progressMapper.toDailyProgressResponse(savedProgress);
     }
     
- // **[HÀM HELPER MỚI]**
     private void validateCheckinDate(LocalDate checkinDate, Plan plan) {
         LocalDate today = LocalDate.now();
         LocalDate yesterday = today.minusDays(1);
@@ -107,7 +108,6 @@ public class ProgressServiceImpl implements ProgressService {
         }
 
         List<ProgressDashboardResponse.MemberProgressResponse> membersProgress = plan.getMembers().stream()
-                // SỬA DÒNG DƯỚI ĐÂY
                 .map(member -> buildMemberProgress(member, plan, user.getId())) // <-- Truyền user.getId() vào
                 .collect(Collectors.toList());
 
@@ -117,7 +117,7 @@ public class ProgressServiceImpl implements ProgressService {
                 .build();
     }
 
- // THAY THẾ TOÀN BỘ HÀM NÀY
+    // --- SỬA HÀM NÀY ---
     private ProgressDashboardResponse.MemberProgressResponse buildMemberProgress(PlanMember member, Plan plan, Integer currentUserId) {
         List<DailyProgress> allProgress = member.getDailyProgressList();
 
@@ -135,10 +135,25 @@ public class ProgressServiceImpl implements ProgressService {
             .collect(Collectors.toMap(
                 LocalDate::toString,
                 date -> {
+                    // --- BẮT ĐẦU THAY ĐỔI ---
                     // Lấy đối tượng DailyProgress cho ngày này
                     DailyProgress progress = progressByDate.get(date);
-                    // Dùng mapper để chuyển đổi sang DTO chi tiết
+                    
+                    if (progress == null) {
+                        // Nếu không có progress, tạo 1 DTO trống
+                        return DailyProgressSummaryResponse.builder()
+                                .id(null)
+                                .completed(false)
+                                .notes(null)
+                                .evidence(null)
+                                .comments(Collections.emptyList())
+                                .reactions(Collections.emptyList())
+                                .build();
+                    }
+                    
+                    // Nếu có progress, mới gọi mapper
                     return progressMapper.toDailyProgressSummaryResponse(progress, currentUserId);
+                    // --- KẾT THÚC THAY ĐỔI ---
                 },
                 (v1, v2) -> v1,
                 LinkedHashMap::new
@@ -149,7 +164,7 @@ public class ProgressServiceImpl implements ProgressService {
                 .userFullName(getUserFullName(member.getUser()))
                 .completedDays((int) completedDays)
                 .completionPercentage(completionPercentage)
-                .dailyStatus(dailyStatus) // Bây giờ map này chứa đầy đủ thông tin
+                .dailyStatus(dailyStatus)
                 .build();
     }
     
