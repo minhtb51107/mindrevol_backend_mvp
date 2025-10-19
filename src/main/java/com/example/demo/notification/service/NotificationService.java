@@ -9,4 +9,5 @@ public interface NotificationService {
     void createNotification(User recipient, String message, String link);
     Page<NotificationResponse> getNotificationsForUser(String userEmail, Pageable pageable);
     void markNotificationAsRead(Long notificationId, String userEmail);
+    void markAllAsReadForUser(String userEmail); // Thêm phương thức này
 }

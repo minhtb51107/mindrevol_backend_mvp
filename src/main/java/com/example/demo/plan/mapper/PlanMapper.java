@@ -2,6 +2,7 @@ package com.example.demo.plan.mapper;
 
 import com.example.demo.plan.dto.response.PlanDetailResponse;
 import com.example.demo.plan.dto.response.PlanPublicResponse;
+import com.example.demo.plan.dto.response.PlanSummaryResponse; // Thêm import này
 import com.example.demo.plan.entity.Plan;
 import com.example.demo.plan.entity.PlanMember;
 import com.example.demo.plan.entity.PlanStatus;
@@ -11,6 +12,8 @@ import com.example.demo.user.entity.User;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.ArrayList; // Thêm import này
+import java.util.Collections;
 import java.util.stream.Collectors;
 
 @Component
@@ -18,9 +21,9 @@ public class PlanMapper {
 
     public PlanDetailResponse toPlanDetailResponse(Plan plan) {
         if (plan == null) return null;
-        
+
         LocalDate startDate = plan.getStartDate();
-        LocalDate endDate = startDate.plusDays(plan.getDurationInDays() - 1);
+        LocalDate endDate = startDate != null ? startDate.plusDays(plan.getDurationInDays() - 1) : null;
         String displayStatus = calculateDisplayStatus(plan.getStatus(), endDate);
 
         return PlanDetailResponse.builder()
@@ -31,25 +34,51 @@ public class PlanMapper {
                 .dailyGoal(plan.getDailyGoal())
                 .shareableLink(plan.getShareableLink())
                 .status(plan.getStatus())
-                .displayStatus(displayStatus) // **[THAY ĐỔI]**
-                .startDate(startDate)         // **[THAY ĐỔI]**
-                .endDate(endDate)             // **[THAY ĐỔI]**
+                .displayStatus(displayStatus)
+                .startDate(startDate)
+                .endDate(endDate)
                 .createdAt(plan.getCreatedAt())
-                .members(plan.getMembers().stream()
-                        .map(this::toPlanMemberResponse)
-                        .collect(Collectors.toList()))
+                .members(plan.getMembers() == null ? Collections.emptyList() :
+                         plan.getMembers().stream()
+                            .map(this::toPlanMemberResponse)
+                            .collect(Collectors.toList()))
+                .dailyTasks(plan.getDailyTasks() == null ? Collections.emptyList() :
+                            new ArrayList<>(plan.getDailyTasks()))
                 .build();
     }
-    
- // **[HÀM HELPER MỚI]**
+
+    // --- THÊM PHƯƠNG THỨC NÀY ---
+    public PlanSummaryResponse toPlanSummaryResponse(PlanMember planMember) {
+        if (planMember == null || planMember.getPlan() == null) return null;
+        Plan plan = planMember.getPlan();
+        LocalDate startDate = plan.getStartDate();
+        LocalDate endDate = startDate != null ? startDate.plusDays(plan.getDurationInDays() - 1) : null;
+        String displayStatus = calculateDisplayStatus(plan.getStatus(), endDate);
+
+        return PlanSummaryResponse.builder()
+                .id(plan.getId())
+                .title(plan.getTitle())
+                .description(plan.getDescription())
+                .durationInDays(plan.getDurationInDays())
+                .startDate(startDate)
+                .endDate(endDate)
+                .displayStatus(displayStatus)
+                .shareableLink(plan.getShareableLink())
+                .memberCount(plan.getMembers() == null ? 0 : plan.getMembers().size())
+                .role(planMember.getRole().name()) // Lấy vai trò từ PlanMember
+                .build();
+    }
+    // --- KẾT THÚC PHẦN THÊM ---
+
+
     private String calculateDisplayStatus(PlanStatus currentStatus, LocalDate endDate) {
         if (currentStatus != PlanStatus.ACTIVE) {
-            return currentStatus.name(); // Trả về trạng thái đã lưu nếu không phải ACTIVE
+            return currentStatus.name();
         }
-        if (LocalDate.now().isAfter(endDate)) {
-            return "COMPLETED"; // Nếu đã qua ngày kết thúc, hiển thị là COMPLETED
+        if (endDate != null && LocalDate.now().isAfter(endDate)) { // Thêm kiểm tra null cho endDate
+            return "COMPLETED";
         }
-        return "ACTIVE"; // Mặc định là ACTIVE
+        return "ACTIVE";
     }
 
     public PlanPublicResponse toPlanPublicResponse(Plan plan) {
@@ -60,25 +89,27 @@ public class PlanMapper {
                 .description(plan.getDescription())
                 .durationInDays(plan.getDurationInDays())
                 .creatorFullName(getUserFullName(plan.getCreator()))
-                .memberCount(plan.getMembers().size())
+                .memberCount(plan.getMembers() == null ? 0 : plan.getMembers().size())
                 .build();
     }
 
     private PlanDetailResponse.PlanMemberResponse toPlanMemberResponse(PlanMember member) {
+        if (member == null) return null; // Thêm kiểm tra null
         return PlanDetailResponse.PlanMemberResponse.builder()
-                .userEmail(member.getUser().getEmail())
+                .userEmail(member.getUser() != null ? member.getUser().getEmail() : "N/A") // Kiểm tra null
                 .userFullName(getUserFullName(member.getUser()))
-                .role(member.getRole().name())
+                .role(member.getRole() != null ? member.getRole().name() : "N/A") // Kiểm tra null
                 .build();
     }
 
     private String getUserFullName(User user) {
-        if (user.getCustomer() != null) {
+        if (user == null) return "N/A";
+        if (user.getCustomer() != null && user.getCustomer().getFullname() != null) {
             return user.getCustomer().getFullname();
         }
-        if (user.getEmployee() != null) {
+        if (user.getEmployee() != null && user.getEmployee().getFullname() != null) {
             return user.getEmployee().getFullname();
         }
-        return user.getEmail(); // Fallback
+        return user.getEmail();
     }
 }

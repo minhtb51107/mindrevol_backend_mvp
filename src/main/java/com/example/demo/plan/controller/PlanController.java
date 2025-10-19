@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
+import com.example.demo.plan.dto.response.PlanSummaryResponse;
 
 @RestController
 @RequestMapping("/api/v1/plans")
@@ -54,5 +56,12 @@ public class PlanController {
     public ResponseEntity<Void> deletePlan(@PathVariable String shareableLink, Authentication authentication) {
         planService.deletePlan(shareableLink, authentication.getName());
         return ResponseEntity.noContent().build();
+    }
+    
+    @GetMapping("/my-plans")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<PlanSummaryResponse>> getMyPlans(Authentication authentication) {
+        List<PlanSummaryResponse> myPlans = planService.getMyPlans(authentication.getName());
+        return ResponseEntity.ok(myPlans);
     }
 }

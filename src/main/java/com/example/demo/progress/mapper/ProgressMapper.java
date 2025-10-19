@@ -9,32 +9,30 @@ import com.example.demo.community.entity.ProgressComment;
 import com.example.demo.community.entity.ProgressReaction;
 import com.example.demo.community.entity.ReactionType;
 import com.example.demo.user.entity.User;
+import java.util.ArrayList; // Thêm import
 import java.util.Arrays;
+import java.util.Collections; // Thêm import
+import java.util.HashSet; // Thêm import
 import java.util.List;
 import java.util.Objects;
+import java.util.Set; // Thêm import
 import java.util.stream.Collectors;
 
 @Component
 public class ProgressMapper {
 
-    /**
-     * Phương thức chính để chuyển đổi, nhận thêm ID của người dùng hiện tại.
-     * @param dailyProgress Đối tượng tiến độ từ database.
-     * @param currentUserId ID của người dùng đang thực hiện request.
-     * @return DTO đã được tối ưu cho việc hiển thị.
-     */
     public DailyProgressResponse toDailyProgressResponse(DailyProgress dailyProgress, Integer currentUserId) {
         if (dailyProgress == null) {
             return null;
         }
 
-        // 1. Map danh sách bình luận (giữ nguyên)
-        var comments = dailyProgress.getComments().stream()
-                .map(this::toCommentResponse)
-                .collect(Collectors.toList());
-        
-        // 2. Map danh sách reactions với logic đã tối ưu
-        var reactions = Arrays.stream(ReactionType.values())
+        List<DailyProgressResponse.CommentResponse> comments = dailyProgress.getComments() == null ? Collections.emptyList() :
+                dailyProgress.getComments().stream()
+                    .map(this::toCommentResponse)
+                    .collect(Collectors.toList());
+
+        List<DailyProgressResponse.ReactionSummaryResponse> reactions = dailyProgress.getReactions() == null ? Collections.emptyList() :
+            Arrays.stream(ReactionType.values())
                 .map(type -> {
                     List<ProgressReaction> reactionsOfType = dailyProgress.getReactions().stream()
                             .filter(r -> r.getType() == type)
@@ -43,20 +41,22 @@ public class ProgressMapper {
                     if (reactionsOfType.isEmpty()) {
                         return null;
                     }
-                    
-                    // **[LOGIC TỐI ƯU]** Kiểm tra xem người dùng hiện tại có trong danh sách reaction không
-                    boolean hasCurrentUserReacted = reactionsOfType.stream()
-                            .anyMatch(r -> r.getUser().getId().equals(currentUserId));
 
-                    // **[DTO TỐI ƯU]** Trả về DTO mới
+                    boolean hasCurrentUserReacted = currentUserId != null && reactionsOfType.stream()
+                            .anyMatch(r -> r.getUser() != null && r.getUser().getId().equals(currentUserId));
+
                     return DailyProgressResponse.ReactionSummaryResponse.builder()
                             .type(type.name())
                             .count(reactionsOfType.size())
-                            .hasCurrentUserReacted(hasCurrentUserReacted) // Thay thế cho list emails
+                            .hasCurrentUserReacted(hasCurrentUserReacted)
                             .build();
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+
+        Set<Integer> completedIndices = dailyProgress.getCompletedTaskIndices() == null ?
+                                         Collections.emptySet() :
+                                         new HashSet<>(dailyProgress.getCompletedTaskIndices()); // Tạo bản sao
 
         return DailyProgressResponse.builder()
                 .id(dailyProgress.getId())
@@ -65,42 +65,43 @@ public class ProgressMapper {
                 .notes(dailyProgress.getNotes())
                 .evidence(dailyProgress.getEvidence())
                 .comments(comments)
-                .reactions(reactions) // Sử dụng danh sách reactions đã tối ưu
+                .reactions(reactions)
+                .completedTaskIndices(completedIndices) // Thêm trường này
                 .build();
     }
-    
-    /**
-     * Phương thức cũ, không còn được khuyến khích sử dụng trực tiếp
-     * khi cần thông tin reaction của người dùng hiện tại.
-     */
+
     public DailyProgressResponse toDailyProgressResponse(DailyProgress dailyProgress) {
-        // Gọi phương thức mới với currentUserId là null để đảm bảo tương thích
-        // và không gây lỗi ở những nơi chưa được cập nhật.
         return toDailyProgressResponse(dailyProgress, null);
     }
-    
+
     public DailyProgressResponse.CommentResponse toCommentResponse(ProgressComment comment) {
-        return DailyProgressResponse.CommentResponse.builder()
+         if (comment == null) return null; // Thêm kiểm tra null
+         User author = comment.getAuthor(); // Lấy author ra biến
+         return DailyProgressResponse.CommentResponse.builder()
                 .id(comment.getId())
                 .content(comment.getContent())
-                .authorEmail(comment.getAuthor().getEmail())
-                .authorFullName(getUserFullName(comment.getAuthor()))
+                .authorEmail(author != null ? author.getEmail() : "N/A") // Kiểm tra null
+                .authorFullName(author != null ? getUserFullName(author) : "Người dùng ẩn danh") // Kiểm tra null
                 .build();
     }
 
     public String getUserFullName(User user) {
-        if (user.getCustomer() != null) return user.getCustomer().getFullname();
-        if (user.getEmployee() != null) return user.getEmployee().getFullname();
+        if (user == null) return "N/A";
+        if (user.getCustomer() != null && user.getCustomer().getFullname() != null) return user.getCustomer().getFullname();
+        if (user.getEmployee() != null && user.getEmployee().getFullname() != null) return user.getEmployee().getFullname();
         return user.getEmail();
     }
-    
+
     public DailyProgressSummaryResponse toDailyProgressSummaryResponse(DailyProgress dailyProgress, Integer currentUserId) {
         if (dailyProgress == null) {
             return null;
         }
 
-        // Tận dụng lại hàm toDailyProgressResponse đã có để lấy comments và reactions
         DailyProgressResponse tempResponse = toDailyProgressResponse(dailyProgress, currentUserId);
+
+        Set<Integer> completedIndices = dailyProgress.getCompletedTaskIndices() == null ?
+                                         Collections.emptySet() :
+                                         new HashSet<>(dailyProgress.getCompletedTaskIndices()); // Tạo bản sao
 
         return DailyProgressSummaryResponse.builder()
                 .id(dailyProgress.getId())
@@ -109,6 +110,7 @@ public class ProgressMapper {
                 .evidence(dailyProgress.getEvidence())
                 .comments(tempResponse.getComments())
                 .reactions(tempResponse.getReactions())
+                .completedTaskIndices(completedIndices) // Thêm trường này
                 .build();
     }
 }

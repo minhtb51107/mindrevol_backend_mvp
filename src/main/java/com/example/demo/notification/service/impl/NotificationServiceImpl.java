@@ -24,7 +24,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final UserRepository userRepository;
     private final NotificationMapper notificationMapper;
 
-    @Async // This method will run in a separate thread
+    @Async("taskExecutor")
     @Override
     @Transactional
     public void createNotification(User recipient, String message, String link) {
@@ -54,10 +54,20 @@ public class NotificationServiceImpl implements NotificationService {
         if (!notification.getRecipient().getId().equals(user.getId())) {
             throw new AccessDeniedException("Bạn không có quyền thay đổi thông báo này.");
         }
-
-        notification.setRead(true);
-        notificationRepository.save(notification);
+        if (!notification.isRead()) { // Chỉ cập nhật nếu chưa đọc
+            notification.setRead(true);
+            notificationRepository.save(notification);
+        }
     }
+
+    // --- THÊM PHƯƠNG THỨC NÀY ---
+    @Override
+    @Transactional
+    public void markAllAsReadForUser(String userEmail) {
+        User user = findUserByEmail(userEmail);
+        notificationRepository.markAllAsReadForRecipient(user.getId());
+    }
+    // --- KẾT THÚC THÊM ---
 
     private User findUserByEmail(String email) {
         return userRepository.findByEmail(email)

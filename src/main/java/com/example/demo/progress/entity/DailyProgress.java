@@ -5,9 +5,13 @@ import jakarta.persistence.*;
 import lombok.*;
 import com.example.demo.community.entity.ProgressComment;
 import com.example.demo.community.entity.ProgressReaction;
-import java.util.List;
 
 import java.time.LocalDate;
+import java.util.ArrayList; // Thêm import
+import java.util.HashSet; // Thêm import
+import java.util.List;
+import java.util.Set; // Thêm import
+
 
 @Getter
 @Setter
@@ -27,21 +31,29 @@ public class DailyProgress {
     private PlanMember planMember;
 
     @Column(nullable = false)
-    private LocalDate date; // Ngày thực hiện tiến độ
+    private LocalDate date;
 
     @Builder.Default
     @Column(nullable = false)
-    private boolean completed = false; // Trạng thái hoàn thành trong ngày
+    private boolean completed = false;
 
     @Column(columnDefinition = "TEXT")
-    private String notes; // Ghi chú hoặc cảm nhận của người học
+    private String notes;
 
     @Column(columnDefinition = "TEXT")
-    private String evidence; // Link bằng chứng (ảnh, file, github...)
-    
-    @OneToMany(mappedBy = "dailyProgress", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ProgressComment> comments;
+    private String evidence;
 
     @OneToMany(mappedBy = "dailyProgress", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ProgressReaction> reactions;
+    @Builder.Default // Thêm default
+    private List<ProgressComment> comments = new ArrayList<>(); // Khởi tạo
+
+    @OneToMany(mappedBy = "dailyProgress", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default // Thêm default
+    private List<ProgressReaction> reactions = new ArrayList<>(); // Khởi tạo
+
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "daily_progress_completed_tasks", joinColumns = @JoinColumn(name = "daily_progress_id"))
+    @Column(name = "task_index") // Lưu chỉ số (index) của task đã hoàn thành
+    @Builder.Default
+    private Set<Integer> completedTaskIndices = new HashSet<>(); // Sử dụng Set để tránh trùng lặp
 }

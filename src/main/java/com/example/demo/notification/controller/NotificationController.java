@@ -31,4 +31,14 @@ public class NotificationController {
         notificationService.markNotificationAsRead(notificationId, userEmail);
         return ResponseEntity.ok().build();
     }
+
+    // --- THÊM PHƯƠNG THỨC NÀY ---
+    @PatchMapping("/read-all")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> markAllAsRead(Authentication authentication) {
+        String userEmail = authentication.getName();
+        notificationService.markAllAsReadForUser(userEmail);
+        return ResponseEntity.ok().build();
+    }
+    // --- KẾT THÚC THÊM ---
 }

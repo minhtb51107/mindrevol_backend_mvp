@@ -14,8 +14,6 @@ import com.example.demo.progress.repository.DailyProgressRepository;
 import com.example.demo.progress.service.ProgressService;
 import com.example.demo.shared.exception.BadRequestException;
 import com.example.demo.shared.exception.ResourceNotFoundException;
-import com.example.demo.user.entity.Customer;
-import com.example.demo.user.entity.Employee;
 import com.example.demo.user.entity.User;
 import com.example.demo.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,11 +22,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
-import java.util.Collections; // <-- THÊM IMPORT NÀY
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects; // Thêm import
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -50,47 +50,69 @@ public class ProgressServiceImpl implements ProgressService {
 
         PlanMember member = planMemberRepository.findByPlanIdAndUserId(plan.getId(), user.getId())
                 .orElseThrow(() -> new AccessDeniedException("Bạn không phải là thành viên của kế hoạch này."));
-        
-     // **[LOGIC MỚI]** Ngăn chặn gian lận và kiểm tra ngày hợp lệ
-        validateCheckinDate(request.getDate(), plan);
 
-        // Validate ngày check-in (Đoạn này bị lặp lại, bạn có thể xóa nếu validateCheckinDate đã đủ)
-        // LocalDate planStartDate = plan.getCreatedAt().toLocalDate(); // Dòng này có vẻ sai, nên dùng plan.getStartDate()
-        LocalDate planStartDate = plan.getStartDate();
-        if (request.getDate().isBefore(planStartDate) || request.getDate().isAfter(planStartDate.plusDays(plan.getDurationInDays() - 1))) {
-            throw new BadRequestException("Ngày check-in không nằm trong thời gian diễn ra kế hoạch.");
-        }
+        validateCheckinDate(request.getDate(), plan);
 
         DailyProgress progress = dailyProgressRepository.findByPlanMemberIdAndDate(member.getId(), request.getDate())
                 .orElse(new DailyProgress());
 
+        // Kiểm tra xem có đang cố gắng sửa log của ngày quá xa không (ví dụ: chỉ cho sửa trong vòng 2 ngày)
+        if (progress.getId() != null && progress.getDate().isBefore(LocalDate.now().minusDays(2))) {
+             throw new BadRequestException("Không thể sửa đổi tiến độ cho ngày đã quá cũ.");
+        }
+
+
         progress.setPlanMember(member);
         progress.setDate(request.getDate());
-        progress.setCompleted(request.getCompleted());
         progress.setNotes(request.getNotes());
         progress.setEvidence(request.getEvidence());
 
+        int totalTasks = plan.getDailyTasks() != null ? plan.getDailyTasks().size() : 0;
+        Set<Integer> validIndices = new HashSet<>();
+
+        if (request.getCompletedTaskIndices() != null) {
+            validIndices = request.getCompletedTaskIndices().stream()
+                .filter(index -> index != null && index >= 0 && index < totalTasks)
+                .collect(Collectors.toSet());
+        }
+        progress.setCompletedTaskIndices(validIndices);
+
+        // Cập nhật trạng thái completed dựa trên tasks (nếu có)
+        if (totalTasks > 0) {
+            progress.setCompleted(validIndices.size() == totalTasks);
+        } else {
+            // Nếu không có task, dùng giá trị completed từ request
+            progress.setCompleted(request.getCompleted());
+        }
+
+        // Validation thêm: Không cho phép completed=false nếu tất cả task đã check
+        if (totalTasks > 0 && validIndices.size() == totalTasks && !request.getCompleted()) {
+             // Người dùng cố tình bỏ check ô "Hoàn thành tất cả" nhưng vẫn check hết task con?
+             // Có thể log cảnh báo hoặc giữ nguyên completed = true
+             progress.setCompleted(true); // Ghi đè lại thành true
+             // Hoặc throw new BadRequestException("Trạng thái không hợp lệ: Tất cả công việc đã hoàn thành.");
+        }
+
+
         DailyProgress savedProgress = dailyProgressRepository.save(progress);
-        return progressMapper.toDailyProgressResponse(savedProgress);
+        return progressMapper.toDailyProgressResponse(savedProgress, user.getId());
     }
-    
+
     private void validateCheckinDate(LocalDate checkinDate, Plan plan) {
         LocalDate today = LocalDate.now();
-        LocalDate yesterday = today.minusDays(1);
+        LocalDate yesterday = today.minusDays(1); // Thêm dòng này
         LocalDate planStartDate = plan.getStartDate();
         LocalDate planEndDate = planStartDate.plusDays(plan.getDurationInDays() - 1);
 
-        // 1. Không cho check-in cho ngày trong tương lai
         if (checkinDate.isAfter(today)) {
             throw new BadRequestException("Không thể ghi nhận tiến độ cho một ngày trong tương lai.");
         }
 
-        // 2. Chỉ cho phép check-in cho "hôm nay" và "hôm qua"
+        // Kích hoạt lại kiểm tra: Chỉ cho check hôm nay hoặc hôm qua
         if (!checkinDate.isEqual(today) && !checkinDate.isEqual(yesterday)) {
              throw new BadRequestException("Bạn chỉ có thể ghi nhận tiến độ cho hôm nay hoặc hôm qua.");
         }
-        
-        // 3. Ngày check-in phải nằm trong khoảng thời gian của kế hoạch
+
         if (checkinDate.isBefore(planStartDate) || checkinDate.isAfter(planEndDate)) {
             throw new BadRequestException("Ngày check-in không nằm trong thời gian diễn ra kế hoạch.");
         }
@@ -102,13 +124,13 @@ public class ProgressServiceImpl implements ProgressService {
         Plan plan = findPlanByShareableLink(shareableLink);
         User user = findUserByEmail(userEmail);
 
-        // Đảm bảo người xem là thành viên của kế hoạch
-        if (plan.getMembers().stream().noneMatch(m -> m.getUser().getId().equals(user.getId()))) {
+        if (plan.getMembers() == null || plan.getMembers().stream().noneMatch(m -> m.getUser() != null && m.getUser().getId().equals(user.getId()))) {
             throw new AccessDeniedException("Bạn không có quyền xem tiến độ của kế hoạch này.");
         }
 
         List<ProgressDashboardResponse.MemberProgressResponse> membersProgress = plan.getMembers().stream()
-                .map(member -> buildMemberProgress(member, plan, user.getId())) // <-- Truyền user.getId() vào
+                .map(member -> buildMemberProgress(member, plan, user.getId()))
+                .filter(Objects::nonNull) // Lọc bỏ member null nếu có lỗi
                 .collect(Collectors.toList());
 
         return ProgressDashboardResponse.builder()
@@ -117,16 +139,18 @@ public class ProgressServiceImpl implements ProgressService {
                 .build();
     }
 
-    // --- SỬA HÀM NÀY ---
     private ProgressDashboardResponse.MemberProgressResponse buildMemberProgress(PlanMember member, Plan plan, Integer currentUserId) {
-        List<DailyProgress> allProgress = member.getDailyProgressList();
+        if (member == null || member.getUser() == null) return null; // Thêm kiểm tra null
+
+        List<DailyProgress> allProgress = member.getDailyProgressList() == null ? Collections.emptyList() : member.getDailyProgressList();
+
 
         long completedDays = allProgress.stream().filter(DailyProgress::isCompleted).count();
         double completionPercentage = (plan.getDurationInDays() > 0) ? ((double) completedDays / plan.getDurationInDays() * 100) : 0;
 
         LocalDate planStartDate = plan.getStartDate();
+        if (planStartDate == null) return null; // Thêm kiểm tra null
 
-        // Tạo một Map từ ngày -> đối tượng DailyProgress tương ứng
         Map<LocalDate, DailyProgress> progressByDate = allProgress.stream()
                 .collect(Collectors.toMap(DailyProgress::getDate, p -> p));
 
@@ -135,12 +159,9 @@ public class ProgressServiceImpl implements ProgressService {
             .collect(Collectors.toMap(
                 LocalDate::toString,
                 date -> {
-                    // --- BẮT ĐẦU THAY ĐỔI ---
-                    // Lấy đối tượng DailyProgress cho ngày này
                     DailyProgress progress = progressByDate.get(date);
-                    
+
                     if (progress == null) {
-                        // Nếu không có progress, tạo 1 DTO trống
                         return DailyProgressSummaryResponse.builder()
                                 .id(null)
                                 .completed(false)
@@ -148,15 +169,14 @@ public class ProgressServiceImpl implements ProgressService {
                                 .evidence(null)
                                 .comments(Collections.emptyList())
                                 .reactions(Collections.emptyList())
+                                .completedTaskIndices(Collections.emptySet())
                                 .build();
                     }
-                    
-                    // Nếu có progress, mới gọi mapper
+
                     return progressMapper.toDailyProgressSummaryResponse(progress, currentUserId);
-                    // --- KẾT THÚC THAY ĐỔI ---
                 },
-                (v1, v2) -> v1,
-                LinkedHashMap::new
+                (v1, v2) -> v1, // Giữ giá trị đầu tiên nếu có key trùng (không nên xảy ra)
+                LinkedHashMap::new // Giữ đúng thứ tự ngày
             ));
 
         return ProgressDashboardResponse.MemberProgressResponse.builder()
@@ -167,13 +187,7 @@ public class ProgressServiceImpl implements ProgressService {
                 .dailyStatus(dailyStatus)
                 .build();
     }
-    
-    // Cần thêm mối quan hệ @OneToMany từ PlanMember đến DailyProgress
-    // Trong file PlanMember.java:
-    // @OneToMany(mappedBy = "planMember", cascade = CascadeType.ALL, orphanRemoval = true)
-    // private List<DailyProgress> dailyProgressList;
 
-    // --- Helper Methods ---
     private User findUserByEmail(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với email: " + email));
@@ -183,12 +197,13 @@ public class ProgressServiceImpl implements ProgressService {
         return planRepository.findByShareableLink(link)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy kế hoạch với link: " + link));
     }
-    
+
     private String getUserFullName(User user) {
-        if (user.getCustomer() != null) {
+        if (user == null) return "N/A";
+        if (user.getCustomer() != null && user.getCustomer().getFullname() != null) {
             return user.getCustomer().getFullname();
         }
-        if (user.getEmployee() != null) {
+        if (user.getEmployee() != null && user.getEmployee().getFullname() != null) {
             return user.getEmployee().getFullname();
         }
         return user.getEmail();

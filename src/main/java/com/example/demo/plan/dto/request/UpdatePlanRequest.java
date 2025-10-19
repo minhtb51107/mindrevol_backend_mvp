@@ -4,6 +4,8 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
+import java.util.List; // Thêm import này
+import java.util.ArrayList; // Thêm import này
 
 @Getter
 @Setter
@@ -18,4 +20,8 @@ public class UpdatePlanRequest {
     private Integer durationInDays;
 
     private String dailyGoal;
+
+    // --- THÊM PHẦN NÀY ---
+    private List<String> dailyTasks = new ArrayList<>(); // Cho phép danh sách rỗng
+    // --- KẾT THÚC PHẦN THÊM ---
 }

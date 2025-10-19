@@ -6,6 +6,7 @@ import lombok.*;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList; // Thêm import này
 import java.util.List;
 import java.util.UUID;
 
@@ -29,10 +30,10 @@ public class Plan {
     private String description;
 
     @Column(nullable = false)
-    private int durationInDays; // Ví dụ: 7 (ngày)
+    private int durationInDays;
 
     @Column(columnDefinition = "TEXT")
-    private String dailyGoal; // Mục tiêu mỗi ngày
+    private String dailyGoal;
 
     @Column(nullable = false, unique = true)
     private String shareableLink;
@@ -45,17 +46,27 @@ public class Plan {
     private List<PlanMember> members;
 
     @Column(name = "start_date", nullable = false)
-    private LocalDate startDate; // Ngày kế hoạch chính thức bắt đầu
+    private LocalDate startDate;
 
     @Builder.Default
     @Column(name = "created_at", nullable = false, updatable = false,
             columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private OffsetDateTime createdAt = OffsetDateTime.now();
-    
+
     @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private PlanStatus status = PlanStatus.ACTIVE;
+
+    // --- THÊM PHẦN NÀY ---
+    @ElementCollection(fetch = FetchType.LAZY) // Tải danh sách tasks khi cần
+    @CollectionTable(name = "plan_daily_tasks", joinColumns = @JoinColumn(name = "plan_id")) // Tên bảng phụ
+    @Column(name = "task_description", columnDefinition = "TEXT") // Tên cột chứa mô tả task
+    @OrderColumn(name = "task_order") // Giữ đúng thứ tự các task
+    @Builder.Default // Khởi tạo list rỗng
+    private List<String> dailyTasks = new ArrayList<>();
+    // --- KẾT THÚC PHẦN THÊM ---
+
 
     @PrePersist
     protected void onCreate() {

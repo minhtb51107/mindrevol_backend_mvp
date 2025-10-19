@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.util.Set; // Thêm import
+import java.util.HashSet; // Thêm import
 
 @Getter
 @Setter
@@ -19,4 +21,6 @@ public class LogProgressRequest {
     private String notes;
 
     private String evidence;
+
+    private Set<Integer> completedTaskIndices = new HashSet<>(); // Cho phép rỗng
 }

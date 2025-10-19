@@ -8,8 +8,8 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.ArrayList; // Import ArrayList
 
-// DTO này chứa đầy đủ thông tin cho những người đã là thành viên
 @Getter
 @Setter
 @Builder
@@ -20,12 +20,15 @@ public class PlanDetailResponse {
     private int durationInDays;
     private String dailyGoal;
     private String shareableLink;
-    private PlanStatus status; // Trạng thái thực tế trong DB
-    private String displayStatus; // Trạng thái tính toán để hiển thị
+    private PlanStatus status;
+    private String displayStatus;
     private LocalDate startDate;
     private LocalDate endDate;
     private OffsetDateTime createdAt;
     private List<PlanMemberResponse> members;
+    // Add this field
+    @Builder.Default // Initialize with an empty list
+    private List<String> dailyTasks = new ArrayList<>();
 
     @Getter
     @Setter
