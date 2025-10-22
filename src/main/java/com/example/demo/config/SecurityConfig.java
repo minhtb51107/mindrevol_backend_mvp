@@ -1,5 +1,3 @@
-// File: src/main/java/com/example/demo/config/SecurityConfig.java (PHIÊN BẢN TRIỆT ĐỂ)
-
 package com.example.demo.config;
 
 import com.example.demo.config.security.CustomAuthenticationEntryPoint;
@@ -35,26 +33,23 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
-    private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint; // <-- INJECT BEAN MỚI
+    private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // **TÍCH HỢP CORS VÀO ĐẦU CHUỖI LỌC**
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(customAuthenticationEntryPoint)
                     )
                 .authorizeHttpRequests(auth -> auth
-                        // Cho phép tất cả các endpoint xác thực và swagger
                         .requestMatchers(
                             "/api/v1/auth/**",
                             "/v3/api-docs/**",
                             "/swagger-ui/**",
                             "/swagger-ui.html"
                         ).permitAll()
-                        // Mọi request khác đều cần xác thực
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -64,7 +59,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // **ĐỊNH NGHĨA BEAN CẤU HÌNH CORS TOÀN CỤC**
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
@@ -78,7 +72,6 @@ public class SecurityConfig {
         return source;
     }
 
-    // --- Các bean còn lại không cần thay đổi ---
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();

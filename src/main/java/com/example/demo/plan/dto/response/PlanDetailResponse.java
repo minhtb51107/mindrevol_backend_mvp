@@ -8,7 +8,7 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.ArrayList; // Import ArrayList
+import java.util.ArrayList;
 
 @Getter
 @Setter
@@ -26,9 +26,12 @@ public class PlanDetailResponse {
     private LocalDate endDate;
     private OffsetDateTime createdAt;
     private List<PlanMemberResponse> members;
-    // Add this field
-    @Builder.Default // Initialize with an empty list
-    private List<String> dailyTasks = new ArrayList<>();
+
+    // --- THAY ĐỔI Ở ĐÂY ---
+    // Thay List<String> bằng List<TaskResponse>
+    @Builder.Default
+    private List<TaskResponse> dailyTasks = new ArrayList<>();
+    // --- KẾT THÚC THAY ĐỔI ---
 
     @Getter
     @Setter

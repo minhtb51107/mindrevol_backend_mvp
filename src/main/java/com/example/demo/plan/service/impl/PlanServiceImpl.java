@@ -7,8 +7,9 @@ import com.example.demo.plan.dto.response.PlanPublicResponse;
 import com.example.demo.plan.entity.MemberRole;
 import com.example.demo.plan.entity.Plan;
 import com.example.demo.plan.entity.PlanMember;
+import com.example.demo.plan.entity.Task; // Thêm import Task
 import com.example.demo.plan.mapper.PlanMapper;
-import com.example.demo.plan.repository.PlanMemberRepository; // Thêm import này
+import com.example.demo.plan.repository.PlanMemberRepository;
 import com.example.demo.plan.repository.PlanRepository;
 import com.example.demo.plan.service.PlanService;
 import com.example.demo.shared.exception.BadRequestException;
@@ -20,11 +21,13 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.demo.plan.dto.response.PlanSummaryResponse;
-import java.util.List;
-import java.util.Objects;
+
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.stream.Collectors; // Thêm import này
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream; // Thêm import IntStream
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +37,7 @@ public class PlanServiceImpl implements PlanService {
     private final PlanRepository planRepository;
     private final UserRepository userRepository;
     private final PlanMapper planMapper;
-    private final PlanMemberRepository planMemberRepository; // Thêm dependency này
+    private final PlanMemberRepository planMemberRepository;
 
     @Override
     public PlanDetailResponse createPlan(CreatePlanRequest request, String creatorEmail) {
@@ -52,11 +55,23 @@ public class PlanServiceImpl implements PlanService {
                 .startDate(request.getStartDate())
                 .creator(creator)
                 .members(new ArrayList<>())
-                .dailyTasks(request.getDailyTasks() == null ? new ArrayList<>() : // Thêm dòng này
-                            request.getDailyTasks().stream()
-                                    .filter(task -> task != null && !task.isBlank()) // Lọc bỏ task rỗng
-                                    .collect(Collectors.toList())) // Lưu danh sách tasks
-                .build();
+                // .dailyTasks(...) // Sẽ xử lý riêng ở dưới
+                .build(); // Tạm thời không khởi tạo dailyTasks ở builder
+
+        // Xử lý tạo Task từ DTO và thêm vào Plan
+        if (request.getDailyTasks() != null) {
+            IntStream.range(0, request.getDailyTasks().size())
+                    .mapToObj(i -> {
+                        CreatePlanRequest.TaskRequest taskReq = request.getDailyTasks().get(i);
+                        return Task.builder()
+                                .description(taskReq.getDescription())
+                                .deadlineTime(taskReq.getDeadlineTime()) // Set deadlineTime
+                                .order(i) // Gán thứ tự
+                                .plan(newPlan) // Liên kết với Plan
+                                .build();
+                    })
+                    .forEach(newPlan.getDailyTasks()::add); // Thêm task vào list của Plan
+        }
 
         PlanMember creatorAsMember = PlanMember.builder()
                 .plan(newPlan)
@@ -109,21 +124,26 @@ public class PlanServiceImpl implements PlanService {
 
         ensureUserIsOwner(plan, user.getId());
 
-        // --- BẮT ĐẦU CẬP NHẬT ---
         plan.setTitle(request.getTitle());
         plan.setDescription(request.getDescription());
         plan.setDurationInDays(request.getDurationInDays());
         plan.setDailyGoal(request.getDailyGoal());
+
         // Cập nhật dailyTasks: Xóa list cũ và thêm list mới
-        plan.getDailyTasks().clear();
+        plan.getDailyTasks().clear(); // Xóa các task cũ (orphanRemoval=true sẽ xóa khỏi DB)
         if (request.getDailyTasks() != null) {
-             plan.getDailyTasks().addAll(
-                 request.getDailyTasks().stream()
-                    .filter(task -> task != null && !task.isBlank()) // Lọc bỏ task rỗng
-                    .collect(Collectors.toList())
-             );
+             IntStream.range(0, request.getDailyTasks().size())
+                 .mapToObj(i -> {
+                     UpdatePlanRequest.TaskRequest taskReq = request.getDailyTasks().get(i);
+                     return Task.builder()
+                             .description(taskReq.getDescription())
+                             .deadlineTime(taskReq.getDeadlineTime()) // Set deadlineTime
+                             .order(i)
+                             .plan(plan) // Quan trọng: Liên kết lại với Plan
+                             .build();
+                 })
+                 .forEach(plan.getDailyTasks()::add); // Thêm task mới
         }
-        // --- KẾT THÚC CẬP NHẬT ---
 
         Plan updatedPlan = planRepository.save(plan);
         return planMapper.toPlanDetailResponse(updatedPlan);
@@ -144,7 +164,7 @@ public class PlanServiceImpl implements PlanService {
         }
 
         plan.getMembers().remove(member);
-        planRepository.save(plan); // Lưu lại plan sau khi xóa member
+        planRepository.save(plan);
     }
 
     @Override
@@ -168,12 +188,10 @@ public class PlanServiceImpl implements PlanService {
     }
 
     private boolean isUserMemberOfPlan(Plan plan, Integer userId) {
-        // Thêm kiểm tra null cho getMembers()
         return plan.getMembers() != null && plan.getMembers().stream().anyMatch(m -> m.getUser() != null && m.getUser().getId().equals(userId));
     }
 
     private void ensureUserIsOwner(Plan plan, Integer userId) {
-        // Thêm kiểm tra null cho getMembers()
         if (plan.getMembers() == null) {
              throw new AccessDeniedException("Không tìm thấy thông tin thành viên.");
         }
@@ -182,17 +200,16 @@ public class PlanServiceImpl implements PlanService {
                 .findFirst()
                 .orElseThrow(() -> new AccessDeniedException("Chỉ chủ sở hữu mới có quyền thực hiện hành động này."));
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public List<PlanSummaryResponse> getMyPlans(String userEmail) {
         User user = findUserByEmail(userEmail);
-        // Sử dụng phương thức repository đã tạo (hoặc query JPQL nếu bạn chọn cách đó)
         List<PlanMember> planMembers = planMemberRepository.findByUserIdWithPlan(user.getId());
 
         return planMembers.stream()
-                .map(planMapper::toPlanSummaryResponse) // Sử dụng mapper mới
-                .filter(Objects::nonNull) // Lọc bỏ kết quả null nếu có lỗi mapping
+                .map(planMapper::toPlanSummaryResponse)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 }

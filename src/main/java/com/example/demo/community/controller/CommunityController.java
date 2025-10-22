@@ -2,7 +2,6 @@ package com.example.demo.community.controller;
 
 import com.example.demo.community.dto.request.AddReactionRequest;
 import com.example.demo.community.dto.request.PostCommentRequest;
-import com.example.demo.community.dto.request.UpdateCommentRequest;
 import com.example.demo.community.service.CommunityService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -45,27 +44,6 @@ public class CommunityController {
             @PathVariable Long progressId,
             Authentication authentication) {
         communityService.removeReaction(progressId, authentication.getName());
-        return ResponseEntity.noContent().build();
-    }
-    
- // URL mới: /api/v1/comments/{commentId}
-    @PutMapping("/comments/{commentId}")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> updateComment(
-            @PathVariable Long commentId,
-            @Valid @RequestBody UpdateCommentRequest request,
-            Authentication authentication) {
-        var updatedComment = communityService.updateComment(commentId, authentication.getName(), request);
-        return ResponseEntity.ok(updatedComment);
-    }
-    
-    // URL mới: /api/v1/comments/{commentId}
-    @DeleteMapping("/comments/{commentId}")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Void> deleteComment(
-            @PathVariable Long commentId,
-            Authentication authentication) {
-        communityService.deleteComment(commentId, authentication.getName());
         return ResponseEntity.noContent().build();
     }
 }

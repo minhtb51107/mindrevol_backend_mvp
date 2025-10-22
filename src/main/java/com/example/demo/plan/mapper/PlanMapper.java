@@ -2,17 +2,19 @@ package com.example.demo.plan.mapper;
 
 import com.example.demo.plan.dto.response.PlanDetailResponse;
 import com.example.demo.plan.dto.response.PlanPublicResponse;
-import com.example.demo.plan.dto.response.PlanSummaryResponse; // Thêm import này
+import com.example.demo.plan.dto.response.PlanSummaryResponse;
+import com.example.demo.plan.dto.response.TaskResponse; // Thêm import TaskResponse
 import com.example.demo.plan.entity.Plan;
 import com.example.demo.plan.entity.PlanMember;
 import com.example.demo.plan.entity.PlanStatus;
+import com.example.demo.plan.entity.Task; // Thêm import Task
 import com.example.demo.user.entity.Customer;
 import com.example.demo.user.entity.Employee;
 import com.example.demo.user.entity.User;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
-import java.util.ArrayList; // Thêm import này
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.stream.Collectors;
 
@@ -43,11 +45,12 @@ public class PlanMapper {
                             .map(this::toPlanMemberResponse)
                             .collect(Collectors.toList()))
                 .dailyTasks(plan.getDailyTasks() == null ? Collections.emptyList() :
-                            new ArrayList<>(plan.getDailyTasks()))
+                            plan.getDailyTasks().stream()
+                                .map(this::toTaskResponse) // Gọi hàm map mới
+                                .collect(Collectors.toList()))
                 .build();
     }
 
-    // --- THÊM PHƯƠNG THỨC NÀY ---
     public PlanSummaryResponse toPlanSummaryResponse(PlanMember planMember) {
         if (planMember == null || planMember.getPlan() == null) return null;
         Plan plan = planMember.getPlan();
@@ -65,17 +68,15 @@ public class PlanMapper {
                 .displayStatus(displayStatus)
                 .shareableLink(plan.getShareableLink())
                 .memberCount(plan.getMembers() == null ? 0 : plan.getMembers().size())
-                .role(planMember.getRole().name()) // Lấy vai trò từ PlanMember
+                .role(planMember.getRole().name())
                 .build();
     }
-    // --- KẾT THÚC PHẦN THÊM ---
-
 
     private String calculateDisplayStatus(PlanStatus currentStatus, LocalDate endDate) {
         if (currentStatus != PlanStatus.ACTIVE) {
             return currentStatus.name();
         }
-        if (endDate != null && LocalDate.now().isAfter(endDate)) { // Thêm kiểm tra null cho endDate
+        if (endDate != null && LocalDate.now().isAfter(endDate)) {
             return "COMPLETED";
         }
         return "ACTIVE";
@@ -94,11 +95,21 @@ public class PlanMapper {
     }
 
     private PlanDetailResponse.PlanMemberResponse toPlanMemberResponse(PlanMember member) {
-        if (member == null) return null; // Thêm kiểm tra null
+        if (member == null) return null;
         return PlanDetailResponse.PlanMemberResponse.builder()
-                .userEmail(member.getUser() != null ? member.getUser().getEmail() : "N/A") // Kiểm tra null
+                .userEmail(member.getUser() != null ? member.getUser().getEmail() : "N/A")
                 .userFullName(getUserFullName(member.getUser()))
-                .role(member.getRole() != null ? member.getRole().name() : "N/A") // Kiểm tra null
+                .role(member.getRole() != null ? member.getRole().name() : "N/A")
+                .build();
+    }
+
+    private TaskResponse toTaskResponse(Task task) {
+        if (task == null) return null;
+        return TaskResponse.builder()
+                .id(task.getId())
+                .description(task.getDescription())
+                .order(task.getOrder())
+                .deadlineTime(task.getDeadlineTime()) // Thêm mapping deadlineTime
                 .build();
     }
 
