@@ -27,7 +27,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
+@EnableMethodSecurity // Giữ lại EnableMethodSecurity để @PreAuthorize hoạt động
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -45,12 +45,13 @@ public class SecurityConfig {
                     )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                            "/api/v1/auth/**",
-                            "/v3/api-docs/**",
-                            "/swagger-ui/**",
-                            "/swagger-ui.html"
+                            "/api/v1/auth/**",    // API xác thực
+                            "/v3/api-docs/**",    // Swagger JSON
+                            "/swagger-ui/**",     // Swagger UI
+                            "/swagger-ui.html",   // Swagger UI entry point
+                            "/ws/**"              // *** THÊM ENDPOINT WEBSOCKET Ở ĐÂY ***
                         ).permitAll()
-                        .anyRequest().authenticated()
+                        .anyRequest().authenticated() // Mọi request khác đều cần xác thực
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
@@ -62,13 +63,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
+        // Cần đảm bảo frontend origin được cho phép
         configuration.setAllowedOrigins(List.of("http://localhost:5173"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
-        
+        configuration.setAllowedHeaders(List.of("*")); // Cho phép mọi header (bao gồm Authorization)
+        configuration.setAllowCredentials(true); // Quan trọng cho cookie/session-based auth (nếu có) và CORS
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+        source.registerCorsConfiguration("/**", configuration); // Áp dụng cho mọi path
         return source;
     }
 

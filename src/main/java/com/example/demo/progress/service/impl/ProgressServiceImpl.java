@@ -9,10 +9,9 @@ import com.example.demo.progress.dto.request.LogProgressRequest;
 import com.example.demo.progress.dto.response.DailyProgressResponse;
 import com.example.demo.progress.dto.response.DailyProgressSummaryResponse;
 import com.example.demo.progress.dto.response.ProgressDashboardResponse;
-// *** BỎ IMPORT NÀY NẾU KHÔNG CÒN DÙNG evidenceLinks TRONG DailyProgressResponse NỮA ***
-// import com.example.demo.progress.dto.response.AttachmentResponse;
+// import com.example.demo.progress.dto.response.AttachmentResponse; // Vẫn giữ import này vì mapper cần
 import com.example.demo.progress.entity.DailyProgress;
-import com.example.demo.progress.entity.EvidenceAttachment;
+// import com.example.demo.progress.entity.EvidenceAttachment; // Không cần nữa
 import com.example.demo.progress.mapper.ProgressMapper;
 import com.example.demo.progress.repository.DailyProgressRepository;
 import com.example.demo.progress.service.ProgressService;
@@ -23,27 +22,22 @@ import com.example.demo.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessagingTemplate; // *** THÊM IMPORT ***
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.demo.plan.entity.TaskComment; // Thêm import TaskComment
-import com.example.demo.plan.entity.TaskAttachment; // Thêm import TaskAttachment
-import com.example.demo.plan.repository.TaskCommentRepository; // Thêm import
-import com.example.demo.plan.repository.TaskAttachmentRepository; // Thêm import
-import com.example.demo.plan.repository.TaskRepository; // Thêm import
-import com.example.demo.progress.dto.request.TaskCheckinUpdateRequest; // Thêm import
+import com.example.demo.plan.entity.TaskComment;
+import com.example.demo.plan.entity.TaskAttachment;
+import com.example.demo.plan.repository.TaskCommentRepository;
+import com.example.demo.plan.repository.TaskAttachmentRepository;
+import com.example.demo.plan.repository.TaskRepository;
+import com.example.demo.progress.dto.request.TaskCheckinUpdateRequest;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*; // Import Map và LinkedHashMap
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.ArrayList;
@@ -54,17 +48,16 @@ import java.util.ArrayList;
 @Transactional
 public class ProgressServiceImpl implements ProgressService {
 
-	// ... (Inject các repository cũ) ...
     private final PlanRepository planRepository;
     private final UserRepository userRepository;
     private final PlanMemberRepository planMemberRepository;
     private final DailyProgressRepository dailyProgressRepository;
-    private final ProgressMapper progressMapper;
-    // --- THÊM CÁC REPOSITORY MỚI ---
+    private final ProgressMapper progressMapper; // Đã inject từ trước
     private final TaskRepository taskRepository;
     private final TaskCommentRepository taskCommentRepository;
     private final TaskAttachmentRepository taskAttachmentRepository;
-    // --- KẾT THÚC THÊM ---
+    private final SimpMessagingTemplate messagingTemplate; // *** INJECT SimpMessagingTemplate ***
+
 
     @Value("${file.upload-dir}")
     private String uploadDir;
@@ -79,32 +72,24 @@ public class ProgressServiceImpl implements ProgressService {
 
         validateCheckinDate(request.getDate(), plan);
 
-        // Tìm hoặc tạo mới DailyProgress (giữ nguyên)
         DailyProgress progress = dailyProgressRepository.findByPlanMemberIdAndDate(member.getId(), request.getDate())
                 .orElse(new DailyProgress());
 
-        // Kiểm tra sửa log cũ (giữ nguyên)
         if (progress.getId() != null && progress.getDate().isBefore(LocalDate.now().minusDays(2))) {
              throw new BadRequestException("Không thể sửa đổi tiến độ cho ngày đã quá cũ.");
         }
 
-        // Cập nhật thông tin chung cho DailyProgress
+        // Cập nhật thông tin chung
         progress.setPlanMember(member);
         progress.setDate(request.getDate());
-        progress.setNotes(request.getNotes()); // Ghi chú chung
-        // Xử lý link chung (nếu còn dùng)
+        progress.setNotes(request.getNotes());
         List<String> validEvidenceLinks = request.getEvidence() == null ? new ArrayList<>() :
                 request.getEvidence().stream()
                         .filter(link -> link != null && !link.isBlank())
                         .collect(Collectors.toList());
         progress.setEvidence(validEvidenceLinks);
 
-        // --- BỎ PHẦN XỬ LÝ attachments CHUNG ---
-        // progress.getAttachments().clear();
-        // if (request.getAttachments() != null) { ... } // Bỏ hẳn đoạn này
-        // --- KẾT THÚC BỎ ---
-
-        // Xử lý completedTaskIds (giữ nguyên)
+        // Xử lý completedTaskIds
         Set<Long> planTaskIds = plan.getDailyTasks().stream().map(Task::getId).collect(Collectors.toSet());
         int totalTasks = planTaskIds.size();
         Set<Long> validCompletedTaskIds = new HashSet<>();
@@ -115,51 +100,46 @@ public class ProgressServiceImpl implements ProgressService {
         }
         progress.setCompletedTaskIds(validCompletedTaskIds);
 
-        // Xử lý completed (giữ nguyên)
+        // Xử lý completed
         if (totalTasks > 0) {
             progress.setCompleted(validCompletedTaskIds.size() == totalTasks);
         } else {
-            progress.setCompleted(request.getCompleted());
+            // Nếu không có task, trạng thái completed dựa vào input request
+            progress.setCompleted(request.getCompleted() != null && request.getCompleted());
         }
-        if (totalTasks > 0 && validCompletedTaskIds.size() == totalTasks && !request.getCompleted()) {
+        // Trường hợp user tick hết task nhưng quên tick completed chung
+        if (totalTasks > 0 && validCompletedTaskIds.size() == totalTasks) {
              progress.setCompleted(true);
         }
 
-        // --- LƯU DailyProgress TRƯỚC KHI XỬ LÝ TASK UPDATES ---
-        // Cần lưu trước để có ID progress nếu là tạo mới (mặc dù hiện tại TaskComment/Attachment không link trực tiếp về Progress)
-        // Hoặc có thể không cần lưu trước nếu không có liên kết trực tiếp
         DailyProgress savedProgress = dailyProgressRepository.save(progress);
-        log.info("Saved/Updated DailyProgress ID: {}", savedProgress.getId());
+        log.info("Saved/Updated DailyProgress ID: {} for user: {} on date: {}", savedProgress.getId(), userEmail, request.getDate());
 
-        // --- THÊM LOGIC XỬ LÝ taskUpdates ---
+        // Xử lý taskUpdates (thêm comment/attachment cho task)
         if (request.getTaskUpdates() != null && !request.getTaskUpdates().isEmpty()) {
             Path rootLocation = Paths.get(uploadDir);
-
             for (TaskCheckinUpdateRequest taskUpdate : request.getTaskUpdates()) {
                 Long taskId = taskUpdate.getTaskId();
-                // Tìm Task tương ứng (nên fetch cả Plan để đảm bảo Task thuộc đúng Plan)
                 Task task = taskRepository.findById(taskId)
-                    .filter(t -> t.getPlan().getId().equals(plan.getId())) // Đảm bảo task thuộc plan này
-                    .orElse(null); // Hoặc ném lỗi nếu muốn chặt chẽ hơn
+                    .filter(t -> t.getPlan().getId().equals(plan.getId()))
+                    .orElse(null);
 
                 if (task == null) {
                     log.warn("Skipping task update for non-existent or mismatched task ID: {}", taskId);
-                    continue; // Bỏ qua nếu task ID không hợp lệ
+                    continue;
                 }
 
-                // 1. Xử lý comment cho task (nếu có)
+                // Xử lý comment
                 String commentContent = taskUpdate.getCommentContent();
                 if (commentContent != null && !commentContent.isBlank()) {
                     TaskComment taskComment = TaskComment.builder()
-                            .task(task)
-                            .author(user) // Người check-in là tác giả comment
-                            .content(commentContent.trim())
-                            .build();
+                            .task(task).author(user).content(commentContent.trim()).build();
                     taskCommentRepository.save(taskComment);
                     log.debug("Added comment for task ID: {}", taskId);
+                    // TODO: Gửi WebSocket update cho Task Comment (sẽ làm sau)
                 }
 
-                // 2. Xử lý attachments cho task (nếu có)
+                // Xử lý attachments
                 if (taskUpdate.getAttachments() != null && !taskUpdate.getAttachments().isEmpty()) {
                     taskUpdate.getAttachments().forEach(attReq -> {
                         TaskAttachment taskAttachment = TaskAttachment.builder()
@@ -173,26 +153,37 @@ public class ProgressServiceImpl implements ProgressService {
                                 .build();
                         taskAttachmentRepository.save(taskAttachment);
                         log.debug("Added attachment {} for task ID: {}", attReq.getStoredFilename(), taskId);
+                         // TODO: Gửi WebSocket update cho Task Attachment (sẽ làm sau)
                     });
                 }
             }
         }
-        // --- KẾT THÚC LOGIC XỬ LÝ taskUpdates ---
 
-        // Trả về response (có thể cần fetch lại progress để lấy comment/attachment mới nhất nếu mapper không tự load)
-        // Hiện tại mapper sẽ lấy từ entity đã save, nhưng comment/attachment thuộc Task, không thuộc Progress
-        // => Cần cập nhật mapper hoặc fetch lại Plan/Task để response đầy đủ
-        // Tạm thời trả về response dựa trên savedProgress (chưa có task comment/attachment)
-        // Để có dữ liệu đầy đủ, cần fetch lại Plan sau khi lưu, khá tốn kém.
-        // Giải pháp tốt hơn: Cập nhật PlanMapper/TaskMapper để nhận thêm currentUserId và fetch comment/attachment nếu cần?
-        // Hoặc: Frontend tự fetch lại PlanDetail sau khi check-in thành công. -> Chọn cách này cho đơn giản.
+        // *** GỬI MESSAGE QUA WEBSOCKET ***
+        String destination = "/topic/plan/" + shareableLink + "/progress";
+        // Chuyển đổi savedProgress sang DTO tóm tắt để gửi đi
+        // Cần truyền userId hiện tại để mapper tính đúng `hasCurrentUserReacted` (mặc dù không dùng ở đây)
+        DailyProgressSummaryResponse progressSummary = progressMapper.toDailyProgressSummaryResponse(savedProgress, user.getId());
 
+        // Tạo payload, bao gồm cả thông tin người check-in
+        Map<String, Object> payload = Map.of(
+            "type", "PROGRESS_UPDATE",
+            "date", savedProgress.getDate().toString(), // Gửi date dạng string YYYY-MM-DD
+            "memberEmail", userEmail, // Email của người vừa check-in
+            "memberFullName", getUserFullName(user), // Tên đầy đủ
+            "progressSummary", progressSummary // Dữ liệu tóm tắt tiến độ
+        );
+        messagingTemplate.convertAndSend(destination, payload);
+        log.info("Sent WebSocket update to {} for progress ID {}", destination, savedProgress.getId());
+        // *** KẾT THÚC GỬI WEBSOCKET ***
+
+        // Trả về response đầy đủ cho người gọi API ban đầu
         return progressMapper.toDailyProgressResponse(savedProgress, user.getId());
     }
 
     private void validateCheckinDate(LocalDate checkinDate, Plan plan) {
-        // ... giữ nguyên ...
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(); // Lấy ngày hiện tại theo múi giờ server
+        // LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")); // Hoặc múi giờ cụ thể nếu cần
         LocalDate yesterday = today.minusDays(1);
         LocalDate planStartDate = plan.getStartDate();
         LocalDate planEndDate = planStartDate.plusDays(plan.getDurationInDays() - 1);
@@ -201,8 +192,9 @@ public class ProgressServiceImpl implements ProgressService {
             throw new BadRequestException("Không thể ghi nhận tiến độ cho một ngày trong tương lai.");
         }
 
-        if (!checkinDate.isEqual(today) && !checkinDate.isEqual(yesterday)) {
-             throw new BadRequestException("Bạn chỉ có thể ghi nhận tiến độ cho hôm nay hoặc hôm qua.");
+        // Cho phép check-in tối đa 2 ngày trước (hôm nay, hôm qua, hôm kia)
+        if (checkinDate.isBefore(today.minusDays(2))) {
+             throw new BadRequestException("Bạn chỉ có thể ghi nhận tiến độ cho hôm nay, hôm qua hoặc hôm kia.");
         }
 
         if (checkinDate.isBefore(planStartDate) || checkinDate.isAfter(planEndDate)) {
@@ -213,17 +205,27 @@ public class ProgressServiceImpl implements ProgressService {
     @Override
     @Transactional(readOnly = true)
     public ProgressDashboardResponse getProgressDashboard(String shareableLink, String userEmail) {
-        // ... giữ nguyên ...
-        Plan plan = findPlanByShareableLink(shareableLink);
+        Plan plan = findPlanByShareableLinkWithTasks(shareableLink); // Dùng hàm helper mới
         User user = findUserByEmail(userEmail);
 
         if (plan.getMembers() == null || plan.getMembers().stream().noneMatch(m -> m.getUser() != null && m.getUser().getId().equals(user.getId()))) {
             throw new AccessDeniedException("Bạn không có quyền xem tiến độ của kế hoạch này.");
         }
 
+        // Lấy tất cả progress của plan này một lần để tối ưu
+        List<DailyProgress> allProgressForPlan = dailyProgressRepository.findAll().stream()
+                .filter(dp -> dp.getPlanMember() != null && dp.getPlanMember().getPlan() != null && dp.getPlanMember().getPlan().getId().equals(plan.getId()))
+                .toList();
+
+        // Nhóm progress theo memberId
+        Map<Integer, List<DailyProgress>> progressByMemberId = allProgressForPlan.stream()
+                .collect(Collectors.groupingBy(dp -> dp.getPlanMember().getId()));
+
+
         List<ProgressDashboardResponse.MemberProgressResponse> membersProgress = plan.getMembers().stream()
-                .map(member -> buildMemberProgress(member, plan, user.getId()))
-                .filter(Objects::nonNull)
+                .map(member -> buildMemberProgress(member, plan, user.getId(), progressByMemberId.getOrDefault(member.getId(), Collections.emptyList()))) // Truyền progress của member vào
+                .filter(Objects::nonNull) // Lọc bỏ member null (nếu có lỗi dữ liệu)
+                .sorted(Comparator.comparing(ProgressDashboardResponse.MemberProgressResponse::getUserFullName)) // Sắp xếp theo tên
                 .collect(Collectors.toList());
 
         return ProgressDashboardResponse.builder()
@@ -232,49 +234,42 @@ public class ProgressServiceImpl implements ProgressService {
                 .build();
     }
 
-    private ProgressDashboardResponse.MemberProgressResponse buildMemberProgress(PlanMember member, Plan plan, Integer currentUserId) {
+    // Sửa hàm buildMemberProgress để nhận progress đã fetch sẵn
+    private ProgressDashboardResponse.MemberProgressResponse buildMemberProgress(PlanMember member, Plan plan, Integer currentUserId, List<DailyProgress> memberProgressList) {
         if (member == null || member.getUser() == null) return null;
 
-        // Tối ưu: Chỉ fetch các progress cần thiết thay vì load hết list? (tùy độ phức tạp)
-        List<DailyProgress> allProgress = member.getDailyProgressList() == null ? Collections.emptyList() : member.getDailyProgressList();
-
-        long completedDays = allProgress.stream().filter(DailyProgress::isCompleted).count();
+        long completedDays = memberProgressList.stream().filter(DailyProgress::isCompleted).count();
         double completionPercentage = (plan.getDurationInDays() > 0) ? ((double) completedDays / plan.getDurationInDays() * 100) : 0;
 
         LocalDate planStartDate = plan.getStartDate();
-        if (planStartDate == null) return null;
+        if (planStartDate == null) return null; // Nên có validate khi tạo plan
 
-        Map<LocalDate, DailyProgress> progressByDate = allProgress.stream()
+        // Tạo map progress theo ngày từ list đã có
+        Map<LocalDate, DailyProgress> progressByDate = memberProgressList.stream()
                 .collect(Collectors.toMap(DailyProgress::getDate, p -> p));
 
+        // Tạo map dailyStatus cho tất cả các ngày trong plan
         Map<String, DailyProgressSummaryResponse> dailyStatus = IntStream.range(0, plan.getDurationInDays())
             .mapToObj(planStartDate::plusDays)
             .collect(Collectors.toMap(
-                LocalDate::toString,
+                LocalDate::toString, // Key là ngày dạng "YYYY-MM-DD"
                 date -> {
                     DailyProgress progress = progressByDate.get(date);
-
                     if (progress == null) {
-                        // --- SỬA LỖI Ở ĐÂY ---
-                        // Bỏ .evidence(...) vì DailyProgressSummaryResponse không còn trường evidence<String>
+                        // Trả về DTO rỗng nếu chưa có progress cho ngày đó
                         return DailyProgressSummaryResponse.builder()
-                                .id(null)
-                                .completed(false)
-                                .notes(null)
-                                // .evidence(Collections.emptyList()) // Bỏ dòng này
-                                .attachments(Collections.emptyList()) // Khởi tạo attachments rỗng
+                                .id(null).completed(false).notes(null)
+                                .attachments(Collections.emptyList()) // Khởi tạo rỗng
                                 .comments(Collections.emptyList())
                                 .reactions(Collections.emptyList())
                                 .completedTaskIds(Collections.emptySet())
                                 .build();
-                        // --- KẾT THÚC SỬA LỖI ---
                     }
-
-                    // Gọi mapper để chuyển đổi (mapper đã được cập nhật để trả về attachments)
+                    // Dùng mapper để chuyển đổi progress hiện có
                     return progressMapper.toDailyProgressSummaryResponse(progress, currentUserId);
                 },
-                (v1, v2) -> v1, // identity merge function
-                LinkedHashMap::new // preserve insertion order
+                (v1, v2) -> v1, // Merge function (không cần thiết nếu key là duy nhất)
+                LinkedHashMap::new // Giữ thứ tự ngày tháng
             ));
 
         return ProgressDashboardResponse.MemberProgressResponse.builder()
@@ -286,29 +281,35 @@ public class ProgressServiceImpl implements ProgressService {
                 .build();
     }
 
+
     private User findUserByEmail(String email) {
-        // ... giữ nguyên ...
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với email: " + email));
     }
 
     private Plan findPlanByShareableLink(String link) {
-        // ... giữ nguyên ...
+        return planRepository.findByShareableLink(link)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy kế hoạch với link: " + link));
+    }
+
+     // Helper để load cả plan, members, tasks
+     private Plan findPlanByShareableLinkWithTasks(String link) {
         return planRepository.findByShareableLink(link)
                 .map(plan -> {
-                    plan.getDailyTasks().size(); // Trigger lazy load tasks
+                    plan.getMembers().size();
+                    plan.getDailyTasks().size();
+                    plan.getDailyTasks().sort(Comparator.comparing(Task::getOrder, Comparator.nullsLast(Integer::compareTo))); // Sắp xếp task theo order
                     return plan;
                 })
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy kế hoạch với link: " + link));
     }
 
     private String getUserFullName(User user) {
-        // ... giữ nguyên ...
         if (user == null) return "N/A";
-        if (user.getCustomer() != null && user.getCustomer().getFullname() != null) {
+        if (user.getCustomer() != null && user.getCustomer().getFullname() != null && !user.getCustomer().getFullname().isBlank()) {
             return user.getCustomer().getFullname();
         }
-        if (user.getEmployee() != null && user.getEmployee().getFullname() != null) {
+        if (user.getEmployee() != null && user.getEmployee().getFullname() != null && !user.getEmployee().getFullname().isBlank()) {
             return user.getEmployee().getFullname();
         }
         return user.getEmail();

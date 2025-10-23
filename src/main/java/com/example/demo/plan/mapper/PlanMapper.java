@@ -11,6 +11,9 @@ import com.example.demo.plan.entity.Task; // Thêm import Task
 import com.example.demo.user.entity.Customer;
 import com.example.demo.user.entity.Employee;
 import com.example.demo.user.entity.User;
+
+import lombok.RequiredArgsConstructor;
+
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -19,8 +22,11 @@ import java.util.Collections;
 import java.util.stream.Collectors;
 
 @Component
+@RequiredArgsConstructor // Thêm annotation này
 public class PlanMapper {
 
+	private final TaskMapper taskMapper;
+	
     public PlanDetailResponse toPlanDetailResponse(Plan plan) {
         if (plan == null) return null;
 
@@ -94,22 +100,35 @@ public class PlanMapper {
                 .build();
     }
 
-    private PlanDetailResponse.PlanMemberResponse toPlanMemberResponse(PlanMember member) {
+    public PlanDetailResponse.PlanMemberResponse toPlanMemberResponse(PlanMember member) {
         if (member == null) return null;
+        User user = member.getUser(); // Lấy user ra 1 lần
         return PlanDetailResponse.PlanMemberResponse.builder()
-                .userEmail(member.getUser() != null ? member.getUser().getEmail() : "N/A")
-                .userFullName(getUserFullName(member.getUser()))
+                .userId(user != null ? user.getId() : null) // *** THÊM MAPPING userId ***
+                .userEmail(user != null ? user.getEmail() : "N/A")
+                .userFullName(getUserFullName(user))
                 .role(member.getRole() != null ? member.getRole().name() : "N/A")
                 .build();
     }
 
+ // SỬA HÀM NÀY
     private TaskResponse toTaskResponse(Task task) {
         if (task == null) return null;
         return TaskResponse.builder()
                 .id(task.getId())
                 .description(task.getDescription())
                 .order(task.getOrder())
-                .deadlineTime(task.getDeadlineTime()) // Thêm mapping deadlineTime
+                .deadlineTime(task.getDeadlineTime())
+                // THÊM PHẦN MAPPING COMMENTS VÀ ATTACHMENTS
+                .comments(task.getComments() == null ? Collections.emptyList() :
+                          task.getComments().stream()
+                              .map(taskMapper::toTaskCommentResponse) // Sử dụng TaskMapper
+                              .collect(Collectors.toList()))
+                .attachments(task.getAttachments() == null ? Collections.emptyList() :
+                             task.getAttachments().stream()
+                                 .map(taskMapper::toTaskAttachmentResponse) // Sử dụng TaskMapper
+                                 .collect(Collectors.toList()))
+                // KẾT THÚC THÊM
                 .build();
     }
 

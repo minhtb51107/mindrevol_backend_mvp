@@ -37,6 +37,7 @@ public class PlanDetailResponse {
     @Setter
     @Builder
     public static class PlanMemberResponse {
+    	private Integer userId; // *** THÊM TRƯỜNG NÀY ***
         private String userEmail;
         private String userFullName;
         private String role;
