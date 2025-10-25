@@ -1,16 +1,13 @@
 package com.example.demo.progress.mapper;
 
-// *** Không cần import AttachmentResponse và EvidenceAttachment ở đây ***
 import com.example.demo.progress.dto.response.DailyProgressResponse;
 import com.example.demo.progress.dto.response.DailyProgressSummaryResponse;
 import com.example.demo.progress.entity.DailyProgress;
 import org.springframework.stereotype.Component;
-
 import com.example.demo.community.entity.ProgressComment;
 import com.example.demo.community.entity.ProgressReaction;
 import com.example.demo.community.entity.ReactionType;
 import com.example.demo.user.entity.User;
-import java.util.ArrayList; // Giữ lại nếu còn dùng evidence links trong DailyProgress entity
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -22,25 +19,40 @@ import java.util.stream.Collectors;
 @Component
 public class ProgressMapper {
 
+    /**
+     * Chuyển đổi DailyProgress sang DailyProgressResponse.
+     * Luôn trả về một đối tượng DTO (có thể rỗng), không bao giờ trả về null.
+     */
     public DailyProgressResponse toDailyProgressResponse(DailyProgress dailyProgress, Integer currentUserId) {
+        // Nếu input là null, trả về một DTO rỗng (KHÔNG NULL)
         if (dailyProgress == null) {
-            return null;
+            return DailyProgressResponse.builder()
+                    .id(null)
+                    .date(null) // Date sẽ được lấy từ key của map trong service
+                    .completed(false)
+                    .notes(null)
+                    .attachments(Collections.emptyList()) // Sử dụng Collections.emptyList()
+                    .comments(Collections.emptyList())
+                    .reactions(Collections.emptyList())
+                    .completedTaskIds(Collections.emptySet()) // Sử dụng Collections.emptySet()
+                    .build();
         }
 
         List<DailyProgressResponse.CommentResponse> comments = dailyProgress.getComments() == null ? Collections.emptyList() :
                 dailyProgress.getComments().stream()
                     .map(this::toCommentResponse)
+                    .filter(Objects::nonNull) // Lọc bỏ comment null nếu có lỗi mapper con
                     .collect(Collectors.toList());
 
         List<DailyProgressResponse.ReactionSummaryResponse> reactions = dailyProgress.getReactions() == null ? Collections.emptyList() :
             Arrays.stream(ReactionType.values())
                 .map(type -> {
                     List<ProgressReaction> reactionsOfType = dailyProgress.getReactions().stream()
-                            .filter(r -> r.getType() == type)
+                            .filter(r -> r.getType() == type && r.getUser() != null) // Thêm check user not null
                             .collect(Collectors.toList());
                     if (reactionsOfType.isEmpty()) return null;
                     boolean hasCurrentUserReacted = currentUserId != null && reactionsOfType.stream()
-                            .anyMatch(r -> r.getUser() != null && r.getUser().getId().equals(currentUserId));
+                            .anyMatch(r -> r.getUser().getId().equals(currentUserId));
                     return DailyProgressResponse.ReactionSummaryResponse.builder()
                             .type(type.name())
                             .count(reactionsOfType.size())
@@ -54,16 +66,13 @@ public class ProgressMapper {
                                         Collections.emptySet() :
                                         new HashSet<>(dailyProgress.getCompletedTaskIds());
 
-        // *** BỎ HOÀN TOÀN LOGIC MAP ATTACHMENTS TỪ DAILYPROGRESS ***
 
         return DailyProgressResponse.builder()
                 .id(dailyProgress.getId())
                 .date(dailyProgress.getDate())
                 .completed(dailyProgress.isCompleted())
                 .notes(dailyProgress.getNotes())
-                // *** BỎ evidence VÀ attachments Ở ĐÂY ***
-                // Nếu DailyProgressResponse *vẫn còn* trường evidence (links chung):
-                // .evidence(dailyProgress.getEvidence() == null ? new ArrayList<>() : new ArrayList<>(dailyProgress.getEvidence()))
+                // .evidence(...) // Bỏ nếu không dùng
                 .comments(comments)
                 .reactions(reactions)
                 .completedTaskIds(completedTaskIds)
@@ -85,34 +94,33 @@ public class ProgressMapper {
                 .build();
     }
 
-    // *** BỎ HOÀN TOÀN PHƯƠNG THỨC toAttachmentResponse ***
-
     public String getUserFullName(User user) {
         if (user == null) return "N/A";
-        if (user.getEmployee() != null && user.getEmployee().getFullname() != null && !user.getEmployee().getFullname().isBlank()) {
-            return user.getEmployee().getFullname();
-        }
+        // Ưu tiên Customer trước vì đây là user cuối
         if (user.getCustomer() != null && user.getCustomer().getFullname() != null && !user.getCustomer().getFullname().isBlank()) {
             return user.getCustomer().getFullname();
         }
-        return user.getEmail();
+        // Sau đó Employee
+        if (user.getEmployee() != null && user.getEmployee().getFullname() != null && !user.getEmployee().getFullname().isBlank()) {
+            return user.getEmployee().getFullname();
+        }
+        return user.getEmail(); // Fallback về email
     }
 
+    /**
+     * Chuyển đổi DailyProgress sang DailyProgressSummaryResponse.
+     * Luôn trả về một đối tượng DTO (có thể rỗng), không bao giờ trả về null.
+     */
     public DailyProgressSummaryResponse toDailyProgressSummaryResponse(DailyProgress dailyProgress, Integer currentUserId) {
-        if (dailyProgress == null) {
-            return null;
-        }
-
-        // Gọi toDailyProgressResponse để tận dụng logic mapping đã có
+        // Gọi toDailyProgressResponse (đã được sửa để không trả về null)
         DailyProgressResponse tempResponse = toDailyProgressResponse(dailyProgress, currentUserId);
 
+        // tempResponse sẽ không bao giờ null nữa, nó sẽ là DTO rỗng nếu dailyProgress là null
         return DailyProgressSummaryResponse.builder()
-                .id(dailyProgress.getId())
-                .completed(dailyProgress.isCompleted())
-                .notes(dailyProgress.getNotes())
-                // *** BỎ evidence VÀ attachments Ở ĐÂY ***
-                // Nếu DailyProgressSummaryResponse *vẫn còn* trường evidence (links chung):
-                // .evidence(tempResponse.getEvidence())
+                .id(tempResponse.getId())
+                .completed(tempResponse.isCompleted())
+                .notes(tempResponse.getNotes())
+                .attachments(tempResponse.getAttachments())
                 .comments(tempResponse.getComments())
                 .reactions(tempResponse.getReactions())
                 .completedTaskIds(tempResponse.getCompletedTaskIds())

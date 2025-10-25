@@ -1,10 +1,13 @@
 package com.example.demo.plan.service.impl;
 
+import com.example.demo.feed.entity.FeedEventType;
+import com.example.demo.feed.service.FeedService;
+import com.example.demo.notification.service.NotificationService;
 import com.example.demo.plan.dto.request.TaskCommentRequest;
 import com.example.demo.plan.dto.request.UpdateTaskCommentRequest;
 import com.example.demo.plan.dto.response.TaskAttachmentResponse;
 import com.example.demo.plan.dto.response.TaskCommentResponse;
-import com.example.demo.plan.entity.*; // Import các entity cần thiết
+import com.example.demo.plan.entity.*;
 import com.example.demo.plan.mapper.TaskMapper;
 import com.example.demo.plan.repository.PlanMemberRepository;
 import com.example.demo.plan.repository.TaskAttachmentRepository;
@@ -14,7 +17,7 @@ import com.example.demo.plan.service.TaskService;
 import com.example.demo.shared.dto.response.FileUploadResponse;
 import com.example.demo.shared.exception.ResourceNotFoundException;
 import com.example.demo.user.entity.User;
-import com.example.demo.user.repository.UserRepository; // *** THÊM IMPORT ***
+import com.example.demo.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,17 +26,16 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.demo.notification.service.NotificationService; // *** THÊM IMPORT ***
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.regex.Matcher; // *** THÊM IMPORT ***
-import java.util.regex.Pattern; // *** THÊM IMPORT ***
-import java.util.Set; // *** THÊM IMPORT ***
-import java.util.HashSet; // *** THÊM IMPORT ***
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -41,19 +43,19 @@ import java.util.HashSet; // *** THÊM IMPORT ***
 @Transactional
 public class TaskServiceImpl implements TaskService {
 
-    private final TaskRepository taskRepository;
+	private final TaskRepository taskRepository;
     private final TaskCommentRepository taskCommentRepository;
     private final TaskAttachmentRepository taskAttachmentRepository;
     private final UserRepository userRepository;
     private final PlanMemberRepository planMemberRepository;
     private final TaskMapper taskMapper;
     private final SimpMessagingTemplate messagingTemplate;
-    private final NotificationService notificationService; // *** THÊM DEPENDENCY ***
+    private final NotificationService notificationService;
+    private final FeedService feedService; // *** INJECT FeedService ***
 
     @Value("${file.upload-dir}")
     private String uploadDir;
 
-    // *** Định nghĩa Pattern để tìm mention dạng @[Display Name](userId) ***
     private static final Pattern MENTION_PATTERN = Pattern.compile("@\\[[^\\]]+?\\]\\((\\d+?)\\)");
 
     @Override
@@ -61,47 +63,43 @@ public class TaskServiceImpl implements TaskService {
         Task task = findTaskByIdWithPlan(taskId);
         User author = findUserByEmail(userEmail);
         ensureUserIsMemberOfPlan(author, task.getPlan());
+        Plan plan = task.getPlan();
 
         TaskComment comment = TaskComment.builder()
                 .task(task)
                 .author(author)
-                .content(request.getContent()) // Nội dung có thể chứa mention
+                .content(request.getContent())
                 .build();
 
         TaskComment savedComment = taskCommentRepository.save(comment);
         log.info("User {} added comment {} to task {}", userEmail, savedComment.getId(), taskId);
-        TaskCommentResponse commentResponse = taskMapper.toTaskCommentResponse(savedComment);
 
-        // *** XỬ LÝ NOTIFICATION CHO MENTION ***
-        String authorName = getUserFullName(author); // Lấy tên người bình luận
-        Plan plan = task.getPlan();
+        // --- XỬ LÝ NOTIFICATION CHO MENTION ---
+        String authorName = getUserFullName(author);
         Set<Integer> mentionedUserIds = extractMentionedUserIds(savedComment.getContent());
-        log.debug("Mentioned User IDs in task comment {}: {}", savedComment.getId(), mentionedUserIds);
-
         for (Integer mentionedUserId : mentionedUserIds) {
-            // Không gửi notification nếu tự mention
             if (!mentionedUserId.equals(author.getId())) {
                 userRepository.findById(mentionedUserId).ifPresent(mentionedUser -> {
-                    // Kiểm tra xem người được mention có còn là thành viên không
-                    if (isUserMemberOfPlan(mentionedUser, plan)) { // Sử dụng helper isUserMemberOfPlan
+                    if (isUserMemberOfPlan(mentionedUser, plan)) {
                         String taskDescShort = task.getDescription().length() > 50 ? task.getDescription().substring(0, 47) + "..." : task.getDescription();
-                        String mentionMessage = String.format("%s đã nhắc đến bạn trong bình luận về công việc '%s' (%s).",
-                                                            authorName, taskDescShort, plan.getTitle());
-                        // Link đến trang plan, thêm fragment để scroll tới comment của task
-                        String mentionLink = String.format("/plan/%s?taskId=%d#task-comment-%d", // Sử dụng query param taskId và fragment commentId
-                                                         plan.getShareableLink(), taskId, savedComment.getId());
+                        String mentionMessage = String.format("%s đã nhắc đến bạn trong bình luận về công việc '%s'.", authorName, taskDescShort);
+                        String mentionLink = String.format("/plan/%s?taskId=%d#task-comment-%d", plan.getShareableLink(), taskId, savedComment.getId());
                         notificationService.createNotification(mentionedUser, mentionMessage, mentionLink);
-                        log.info("Sent mention notification to user {} from task comment {}", mentionedUserId, savedComment.getId());
-                    } else {
-                         log.warn("User {} mentioned in task comment {} is no longer a member of plan {}.", mentionedUserId, savedComment.getId(), plan.getId());
                     }
                 });
             }
         }
-        // *** KẾT THÚC XỬ LÝ MENTION ***
 
-        // Gửi WebSocket (giữ nguyên)
-        String destination = "/topic/plan/" + task.getPlan().getShareableLink() + "/tasks";
+        // *** GỬI FEED EVENT TASK_COMMENT_ADDED ***
+        Map<String, Object> details = new HashMap<>();
+        details.put("taskId", taskId);
+        details.put("taskDescriptionShort", task.getDescription().length() > 50 ? task.getDescription().substring(0, 47) + "..." : task.getDescription());
+        details.put("taskCommentId", savedComment.getId());
+        feedService.createAndPublishFeedEvent(FeedEventType.TASK_COMMENT_ADDED, author, plan, details);
+        
+        // --- GỬI WEBSOCKET ---
+        TaskCommentResponse commentResponse = taskMapper.toTaskCommentResponse(savedComment);
+        String destination = "/topic/plan/" + plan.getShareableLink() + "/tasks";
         Map<String, Object> payload = Map.of(
             "type", "NEW_TASK_COMMENT",
             "taskId", taskId,
@@ -119,47 +117,39 @@ public class TaskServiceImpl implements TaskService {
         User user = findUserByEmail(userEmail);
 
         if (!comment.getAuthor().getId().equals(user.getId())) {
-            log.warn("User {} attempted to update task comment {} without permission (not author).", userEmail, commentId);
             throw new AccessDeniedException("Bạn không có quyền sửa bình luận này.");
         }
 
-        String oldContent = comment.getContent(); // Lưu lại nội dung cũ để so sánh mention
-        comment.setContent(request.getContent()); // Cập nhật nội dung mới
+        String oldContent = comment.getContent();
+        comment.setContent(request.getContent());
         TaskComment updatedComment = taskCommentRepository.save(comment);
         log.info("User {} updated task comment {}", userEmail, commentId);
-        TaskCommentResponse commentResponse = taskMapper.toTaskCommentResponse(updatedComment);
 
-        // *** XỬ LÝ NOTIFICATION CHO MENTION KHI UPDATE ***
+        // --- XỬ LÝ NOTIFICATION CHO MENTION KHI UPDATE ---
         Task task = comment.getTask();
         Plan plan = task.getPlan();
-        String authorName = getUserFullName(user); // Lấy tên người sửa
-
+        String authorName = getUserFullName(user);
         Set<Integer> oldMentionedIds = extractMentionedUserIds(oldContent);
         Set<Integer> newMentionedIds = extractMentionedUserIds(updatedComment.getContent());
-        // Chỉ gửi cho những người mới được mention (chưa có trong oldMentionedIds)
         for (Integer mentionedUserId : newMentionedIds) {
-            if (!oldMentionedIds.contains(mentionedUserId) && // Là mention mới
-                !mentionedUserId.equals(user.getId())) {    // Không phải tự mention
+            if (!oldMentionedIds.contains(mentionedUserId) && !mentionedUserId.equals(user.getId())) {
                 userRepository.findById(mentionedUserId).ifPresent(mentionedUser -> {
-                     if (isUserMemberOfPlan(mentionedUser, plan)) { // Kiểm tra là thành viên
+                     if (isUserMemberOfPlan(mentionedUser, plan)) {
                         String taskDescShort = task.getDescription().length() > 50 ? task.getDescription().substring(0, 47) + "..." : task.getDescription();
-                        String mentionMessage = String.format("%s đã nhắc đến bạn trong bình luận đã sửa về công việc '%s' (%s).",
-                                                            authorName, taskDescShort, plan.getTitle());
-                        String mentionLink = String.format("/plan/%s?taskId=%d#task-comment-%d",
-                                                         plan.getShareableLink(), task.getId(), updatedComment.getId());
+                        String mentionMessage = String.format("%s đã nhắc đến bạn trong bình luận đã sửa về công việc '%s'.", authorName, taskDescShort);
+                        String mentionLink = String.format("/plan/%s?taskId=%d#task-comment-%d", plan.getShareableLink(), task.getId(), updatedComment.getId());
                         notificationService.createNotification(mentionedUser, mentionMessage, mentionLink);
-                        log.info("Sent mention notification (update) to user {} from task comment {}", mentionedUserId, updatedComment.getId());
                      }
                 });
             }
         }
-        // *** KẾT THÚC XỬ LÝ MENTION ***
 
-        // Gửi WebSocket (giữ nguyên)
-        String destination = "/topic/plan/" + comment.getTask().getPlan().getShareableLink() + "/tasks";
+        // --- GỬI WEBSOCKET ---
+        TaskCommentResponse commentResponse = taskMapper.toTaskCommentResponse(updatedComment);
+        String destination = "/topic/plan/" + plan.getShareableLink() + "/tasks";
         Map<String, Object> payload = Map.of(
             "type", "UPDATE_TASK_COMMENT",
-            "taskId", comment.getTask().getId(),
+            "taskId", task.getId(),
             "comment", commentResponse
         );
         messagingTemplate.convertAndSend(destination, payload);
@@ -174,20 +164,19 @@ public class TaskServiceImpl implements TaskService {
         User user = findUserByEmail(userEmail);
         Task task = comment.getTask();
         Plan plan = task.getPlan();
-        Long taskId = task.getId(); // Lưu taskId trước khi xóa comment
+        Long taskId = task.getId();
 
         boolean isAuthor = comment.getAuthor().getId().equals(user.getId());
         boolean isPlanOwner = isUserPlanOwner(user, plan);
 
         if (!isAuthor && !isPlanOwner) {
-            log.warn("User {} attempted to delete comment {} without permission.", userEmail, commentId);
             throw new AccessDeniedException("Bạn không có quyền xóa bình luận này.");
         }
 
         taskCommentRepository.delete(comment);
         log.info("User {} deleted comment {}", userEmail, commentId);
 
-         // Gửi WebSocket (giữ nguyên)
+        // --- GỬI WEBSOCKET ---
         String destination = "/topic/plan/" + plan.getShareableLink() + "/tasks";
         Map<String, Object> payload = Map.of(
             "type", "DELETE_TASK_COMMENT",
@@ -195,7 +184,7 @@ public class TaskServiceImpl implements TaskService {
             "commentId", commentId
         );
         messagingTemplate.convertAndSend(destination, payload);
-         log.debug("Sent WebSocket update for deleted task comment to {}", destination);
+        log.debug("Sent WebSocket update for deleted task comment to {}", destination);
     }
 
     @Override
@@ -216,11 +205,11 @@ public class TaskServiceImpl implements TaskService {
 
         TaskAttachment savedAttachment = taskAttachmentRepository.save(attachment);
         log.info("User {} added attachment {} to task {}", userEmail, savedAttachment.getId(), taskId);
+        
+        // --- GỬI WEBSOCKET ---
         TaskAttachmentResponse attachmentResponse = taskMapper.toTaskAttachmentResponse(savedAttachment);
-
-        // Gửi WebSocket (giữ nguyên)
         String destination = "/topic/plan/" + task.getPlan().getShareableLink() + "/tasks";
-         Map<String, Object> payload = Map.of(
+        Map<String, Object> payload = Map.of(
             "type", "NEW_TASK_ATTACHMENT",
             "taskId", taskId,
             "attachment", attachmentResponse
@@ -240,32 +229,22 @@ public class TaskServiceImpl implements TaskService {
         Long taskId = task.getId();
         String storedFilename = attachment.getStoredFilename();
 
-        boolean isPlanOwner = isUserPlanOwner(user, plan);
-
-        if (!isPlanOwner) {
-             log.warn("User {} attempted to delete task attachment {} without permission (not owner).", userEmail, attachmentId);
-            throw new AccessDeniedException("Chỉ chủ sở hữu kế hoạch mới có quyền xóa file đính kèm công việc.");
+        if (!isUserPlanOwner(user, plan)) {
+            throw new AccessDeniedException("Chỉ chủ sở hữu kế hoạch mới có quyền xóa file đính kèm.");
         }
 
-        // Xóa file vật lý (giữ nguyên)
         try {
-            Path filePath = Paths.get(uploadDir).resolve(storedFilename).normalize().toAbsolutePath();
-            if (filePath.startsWith(Paths.get(uploadDir).normalize().toAbsolutePath())) {
-                 Files.deleteIfExists(filePath);
-                 log.info("Deleted physical file: {}", filePath);
-            } else {
-                 log.warn("Attempted to delete file outside upload directory: {}", filePath);
-            }
+            Path filePath = Paths.get(uploadDir).resolve(storedFilename).normalize();
+            Files.deleteIfExists(filePath);
+            log.info("Deleted physical file: {}", filePath);
         } catch (IOException e) {
             log.error("Failed to delete physical file: {}", storedFilename, e);
-        } catch (Exception e) {
-            log.error("Unexpected error deleting physical file: {}", storedFilename, e);
         }
 
         taskAttachmentRepository.delete(attachment);
         log.info("User {} deleted task attachment {}", userEmail, attachmentId);
 
-        // Gửi WebSocket (giữ nguyên)
+        // --- GỬI WEBSOCKET ---
         String destination = "/topic/plan/" + plan.getShareableLink() + "/tasks";
         Map<String, Object> payload = Map.of(
             "type", "DELETE_TASK_ATTACHMENT",

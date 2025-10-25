@@ -1,0 +1,11 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="SOF304_TestSuite" parallel="classes" thread-count="2">
+
+    <test name="BaiKiemTraDongThoi">
+        <classes>
+            <class name="com.fpoly.Bai1_DuckDuckGo"/>
+            <class name="com.fpoly.Bai2_MNS"/>
+        </classes>
+    </test>
+
+</suite>

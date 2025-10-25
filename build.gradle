@@ -64,11 +64,14 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
-
-
-    // JUnit 5
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
+    
+    testImplementation 'org.testng:testng:7.10.2' // Hoặc phiên bản mới hơn
+	testImplementation 'org.mockito:mockito-testng:0.4.31' // Hoặc phiên bản tương thích
+	
+	// build.gradle
+	testImplementation 'org.seleniumhq.selenium:selenium-java:4.23.0' // Hoặc phiên bản mới hơn
+	testImplementation 'io.github.bonigarcia:webdrivermanager:5.9.1' // Quản lý driver
+	testImplementation 'org.testng:testng:7.10.2' // TestNG
 
     // Mockito
 	testImplementation("org.mockito:mockito-core:5.18.0")
@@ -102,6 +105,25 @@ tasks.withType(JavaCompile).configureEach {
     ])
 }
 
+// Task chạy JUnit
+tasks.register('testJUnit', Test) {
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    description = 'Run JUnit tests'
+    group = 'verification'
+}
+
+// Task chạy TestNG
+tasks.register('testNG', Test) {
+    useTestNG()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    description = 'Run TestNG tests'
+    group = 'verification'
+}
+
+
 // Cấu hình để Gradle tự động tạo file .classpath cho Eclipse/STS
 eclipse {
     classpath {
@@ -120,3 +142,4 @@ eclipse {
 test {
     useJUnitPlatform()
 }
+
