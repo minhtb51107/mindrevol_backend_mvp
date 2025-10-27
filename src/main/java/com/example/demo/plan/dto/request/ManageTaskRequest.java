@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate; // --- THÊM IMPORT ---
 import java.time.LocalTime;
 
 @Getter
@@ -19,4 +20,11 @@ public class ManageTaskRequest {
     // Format HH:mm (ví dụ: "17:30") khi gửi từ frontend
     @JsonFormat(pattern = "HH:mm")
     private LocalTime deadlineTime; // Nullable
+
+    // --- THÊM TRƯỜNG NÀY ---
+    // Format YYYY-MM-DD (ví dụ: "2025-10-28")
+    // Sẽ là bắt buộc khi tạo task mới
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate taskDate; 
+    // --- KẾT THÚC THÊM ---
 }

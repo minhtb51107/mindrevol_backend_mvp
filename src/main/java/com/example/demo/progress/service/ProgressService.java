@@ -1,26 +1,31 @@
 package com.example.demo.progress.service;
 
-import com.example.demo.progress.dto.request.LogProgressRequest;
-import com.example.demo.progress.dto.response.DailyProgressResponse;
-import com.example.demo.progress.dto.response.ProgressDashboardResponse;
+import com.example.demo.progress.dto.request.CheckInRequest;
+import com.example.demo.progress.dto.response.TimelineResponse;
 import com.example.demo.user.dto.response.UserStatsResponse;
-import com.example.demo.progress.dto.response.ProgressChartDataResponse; // *** THÊM IMPORT ***
-import java.util.List; // *** THÊM IMPORT ***
+import com.example.demo.progress.dto.response.ProgressChartDataResponse;
 
+import java.time.LocalDate;
+import java.util.List;
 
 public interface ProgressService {
 
-    DailyProgressResponse logOrUpdateDailyProgress(String shareableLink, String userEmail, LogProgressRequest request);
+    /**
+     * Thực hiện một lần check-in (tạo Card Task trên Timeline).
+     */
+    TimelineResponse.CheckInEventResponse createCheckIn(String shareableLink, String userEmail, CheckInRequest request);
 
-    ProgressDashboardResponse getProgressDashboard(String shareableLink, String userEmail);
+    /**
+     * Lấy dữ liệu Timeline (Cột Giữa) cho một ngày cụ thể.
+     */
+    TimelineResponse getDailyTimeline(String shareableLink, String userEmail, LocalDate date);
+
+    
+    // --- CÁC PHƯƠNG THỨC NÀY CẦN ĐƯỢC ĐỊNH NGHĨA LẠI ---
+    // Logic cũ của chúng dựa trên DailyProgress đã bị loại bỏ.
+    // Tạm thời giữ lại interface, nhưng ServiceImpl sẽ (hoặc không) implement chúng.
 
     UserStatsResponse getUserStats(String userEmail);
 
-    // *** THÊM PHƯƠNG THỨC MỚI ***
-    /**
-     * Lấy dữ liệu tiến độ cho biểu đồ 7 ngày gần nhất của người dùng.
-     * @param userEmail Email của người dùng.
-     * @return Danh sách dữ liệu cho biểu đồ.
-     */
     List<ProgressChartDataResponse> getProgressChartData(String userEmail);
 }

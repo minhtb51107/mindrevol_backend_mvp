@@ -3,9 +3,10 @@ package com.example.demo.plan.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate; // --- THÊM IMPORT ---
 import java.time.LocalTime;
-import java.util.ArrayList; // Thêm import
-import java.util.List; // Thêm import
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @Setter
@@ -33,19 +34,23 @@ public class Task {
     @Column(name = "deadline_time")
     private LocalTime deadlineTime;
 
-    // --- THÊM CÁC MỐI QUAN HỆ NÀY ---
+    // --- THÊM TRƯỜNG NÀY ---
+    @Column(name = "task_date")
+    private LocalDate taskDate;
+    // --- KẾT THÚC THÊM ---
+
     @OneToMany(mappedBy = "task", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @OrderBy("createdAt ASC") // Sắp xếp comment theo thời gian tạo
+    @OrderBy("createdAt ASC")
     @Builder.Default
     private List<TaskComment> comments = new ArrayList<>();
 
     @OneToMany(mappedBy = "task", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @OrderBy("uploadedAt ASC") // Sắp xếp attachment theo thời gian upload
+    @OrderBy("uploadedAt ASC")
     @Builder.Default
     private List<TaskAttachment> attachments = new ArrayList<>();
-    // --- KẾT THÚC THÊM ---
 
-    // --- THÊM PHƯƠNG THỨC TIỆN ÍCH (OPTIONAL) ---
+    // ... (Các phương thức helper giữ nguyên) ...
+    
     public void addComment(TaskComment comment) {
         comments.add(comment);
         comment.setTask(this);
@@ -65,5 +70,4 @@ public class Task {
         attachments.remove(attachment);
         attachment.setTask(null);
     }
-    // --- KẾT THÚC THÊM ---
 }

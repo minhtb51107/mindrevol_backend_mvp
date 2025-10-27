@@ -3,22 +3,25 @@ package com.example.demo.community.service.impl;
 import com.example.demo.community.dto.request.AddReactionRequest;
 import com.example.demo.community.dto.request.PostCommentRequest;
 import com.example.demo.community.dto.request.UpdateCommentRequest;
+import com.example.demo.community.dto.response.CommentResponse;
+// *** THAY ĐỔI IMPORT DTO ***
+// import com.example.demo.progress.dto.response.DailyProgressResponse; // Không dùng DTO lồng nhau của DailyProgressResponse nữa
+// *** KẾT THÚC THAY ĐỔI IMPORT DTO ***
 import com.example.demo.community.entity.ProgressComment;
 import com.example.demo.community.entity.ProgressReaction;
 import com.example.demo.community.entity.ReactionType;
 import com.example.demo.community.repository.ProgressCommentRepository;
 import com.example.demo.community.repository.ProgressReactionRepository;
 import com.example.demo.community.service.CommunityService;
-import com.example.demo.feed.entity.FeedEventType; // *** THÊM IMPORT ***
-import com.example.demo.feed.service.FeedService; // *** THÊM IMPORT ***
+import com.example.demo.feed.entity.FeedEventType;
+import com.example.demo.feed.service.FeedService;
 import com.example.demo.notification.service.NotificationService;
 import com.example.demo.plan.entity.MemberRole;
 import com.example.demo.plan.entity.Plan;
 import com.example.demo.plan.entity.PlanMember;
-import com.example.demo.progress.dto.response.DailyProgressResponse;
-import com.example.demo.progress.entity.DailyProgress;
-import com.example.demo.progress.mapper.ProgressMapper;
-import com.example.demo.progress.repository.DailyProgressRepository;
+// import com.example.demo.progress.mapper.ProgressMapper; // *** KHÔNG IMPORT ProgressMapper NỮA ***
+import com.example.demo.progress.entity.DailyProgress; // Vẫn cần entity này vì comment/reaction đang gắn vào nó
+import com.example.demo.progress.repository.DailyProgressRepository; // Vẫn cần repo này
 import com.example.demo.shared.exception.ResourceNotFoundException;
 import com.example.demo.user.entity.User;
 import com.example.demo.user.repository.UserRepository;
@@ -29,7 +32,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap; // *** THÊM IMPORT ***
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -45,20 +48,20 @@ public class CommunityServiceImpl implements CommunityService {
     private final DailyProgressRepository progressRepository;
     private final UserRepository userRepository;
     private final ProgressReactionRepository reactionRepository;
-    private final ProgressMapper progressMapper;
+    // private final ProgressMapper progressMapper; // *** BỎ DEPENDENCY NÀY ***
     private final ProgressCommentRepository commentRepository;
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
-    private final FeedService feedService; // *** INJECT FeedService ***
+    private final FeedService feedService;
 
     private static final Pattern MENTION_PATTERN = Pattern.compile("@\\[[^\\]]+?\\]\\((\\d+?)\\)");
 
     @Override
-    public DailyProgressResponse.CommentResponse postComment(Long progressId, String userEmail, PostCommentRequest request) {
+    public CommentResponse postComment(Long progressId, String userEmail, PostCommentRequest request) { // *** THAY ĐỔI KIỂU TRẢ VỀ ***
         DailyProgress progress = findProgressById(progressId);
         User author = findUserByEmail(userEmail);
-        ensureUserIsMemberOfPlan(author, progress.getPlanMember().getPlan()); // Check membership using Plan
-        Plan plan = progress.getPlanMember().getPlan(); // Get Plan entity
+        ensureUserIsMemberOfPlan(author, progress.getPlanMember().getPlan());
+        Plan plan = progress.getPlanMember().getPlan();
 
         ProgressComment comment = ProgressComment.builder()
                 .dailyProgress(progress)
@@ -67,10 +70,12 @@ public class CommunityServiceImpl implements CommunityService {
                 .build();
 
         ProgressComment savedComment = commentRepository.save(comment);
-        DailyProgressResponse.CommentResponse commentResponse = progressMapper.toCommentResponse(savedComment);
-        String authorName = progressMapper.getUserFullName(author);
+        // *** THAY ĐỔI: Gọi helper method nội bộ ***
+        CommentResponse commentResponse = toCommentResponse(savedComment);
+        String authorName = getUserFullName(author); // Gọi helper method nội bộ
+        // *** KẾT THÚC THAY ĐỔI ***
 
-        // --- XỬ LÝ NOTIFICATION THÔNG THƯỜNG & MENTION (giữ nguyên) ---
+        // --- XỬ LÝ NOTIFICATION THÔNG THƯỜNG & MENTION ---
         User progressOwner = progress.getPlanMember().getUser();
         if (!author.getId().equals(progressOwner.getId())) {
              String message = authorName + " đã bình luận về tiến độ ngày " + progress.getDate() + " của bạn trong kế hoạch '" + plan.getTitle() + "'.";
@@ -101,7 +106,7 @@ public class CommunityServiceImpl implements CommunityService {
         // *** KẾT THÚC GỬI FEED EVENT ***
 
 
-        // GỬI MESSAGE WEBSOCKET NEW_COMMENT (giữ nguyên)
+        // GỬI MESSAGE WEBSOCKET NEW_COMMENT
         String destination = "/topic/plan/" + plan.getShareableLink() + "/community";
         Map<String, Object> payload = Map.of( "type", "NEW_COMMENT", "progressId", progressId, "comment", commentResponse );
         messagingTemplate.convertAndSend(destination, payload);
@@ -110,7 +115,7 @@ public class CommunityServiceImpl implements CommunityService {
     }
 
     @Override
-    public DailyProgressResponse.CommentResponse updateComment(Long commentId, String userEmail, UpdateCommentRequest request) {
+    public CommentResponse updateComment(Long commentId, String userEmail, UpdateCommentRequest request) { // *** THAY ĐỔI KIỂU TRẢ VỀ ***
         ProgressComment comment = findCommentById(commentId);
         User user = findUserByEmail(userEmail);
 
@@ -124,10 +129,12 @@ public class CommunityServiceImpl implements CommunityService {
 
         DailyProgress progress = comment.getDailyProgress();
         Plan plan = progress.getPlanMember().getPlan();
-        DailyProgressResponse.CommentResponse commentResponse = progressMapper.toCommentResponse(updatedComment);
-        String authorName = progressMapper.getUserFullName(user);
+        // *** THAY ĐỔI: Gọi helper method nội bộ ***
+        CommentResponse commentResponse = toCommentResponse(updatedComment);
+        String authorName = getUserFullName(user); // Gọi helper method nội bộ
+        // *** KẾT THÚC THAY ĐỔI ***
 
-        // --- XỬ LÝ NOTIFICATION MENTION KHI UPDATE (giữ nguyên) ---
+        // --- XỬ LÝ NOTIFICATION MENTION KHI UPDATE ---
          Set<Integer> oldMentionedIds = extractMentionedUserIds(oldContent);
          Set<Integer> newMentionedIds = extractMentionedUserIds(updatedComment.getContent());
          for (Integer mentionedUserId : newMentionedIds) {
@@ -146,7 +153,7 @@ public class CommunityServiceImpl implements CommunityService {
          }
         // --- KẾT THÚC XỬ LÝ NOTIFICATION ---
 
-        // GỬI MESSAGE WEBSOCKET UPDATE_COMMENT (giữ nguyên)
+        // GỬI MESSAGE WEBSOCKET UPDATE_COMMENT
         String destination = "/topic/plan/" + plan.getShareableLink() + "/community";
         Map<String, Object> payload = Map.of( "type", "UPDATE_COMMENT", "progressId", progress.getId(), "comment", commentResponse );
         messagingTemplate.convertAndSend(destination, payload);
@@ -164,7 +171,6 @@ public class CommunityServiceImpl implements CommunityService {
         Long progressId = progress.getId(); // Store before deleting comment
 
         boolean isAuthor = comment.getAuthor().getId().equals(user.getId());
-        // Ensure plan members are loaded before checking role
         plan.getMembers().size(); // Trigger load if necessary
         boolean isPlanOwner = plan.getMembers().stream()
                 .anyMatch(m -> m.getUser() != null && m.getUser().getId().equals(user.getId()) && m.getRole() == MemberRole.OWNER);
@@ -176,7 +182,7 @@ public class CommunityServiceImpl implements CommunityService {
         commentRepository.delete(comment);
         log.info("User {} deleted comment {}", userEmail, commentId);
 
-        // GỬI MESSAGE WEBSOCKET DELETE_COMMENT (giữ nguyên)
+        // GỬI MESSAGE WEBSOCKET DELETE_COMMENT
         String destination = "/topic/plan/" + plan.getShareableLink() + "/community";
         Map<String, Object> payload = Map.of( "type", "DELETE_COMMENT", "progressId", progressId, "commentId", commentId );
         messagingTemplate.convertAndSend(destination, payload);
@@ -188,8 +194,8 @@ public class CommunityServiceImpl implements CommunityService {
     public void addOrUpdateReaction(Long progressId, String userEmail, AddReactionRequest request) {
         DailyProgress progress = findProgressById(progressId);
         User reactor = findUserByEmail(userEmail);
-        ensureUserIsMemberOfPlan(reactor, progress.getPlanMember().getPlan()); // Check membership using Plan
-        Plan plan = progress.getPlanMember().getPlan(); // Get Plan
+        ensureUserIsMemberOfPlan(reactor, progress.getPlanMember().getPlan());
+        Plan plan = progress.getPlanMember().getPlan();
 
         ProgressReaction reaction = reactionRepository.findByDailyProgressIdAndUserId(progressId, reactor.getId()).orElse(new ProgressReaction());
         boolean typeChanged = reaction.getId() == null || reaction.getType() != request.getReactionType();
@@ -199,10 +205,12 @@ public class CommunityServiceImpl implements CommunityService {
         reaction.setType(request.getReactionType());
         ProgressReaction savedReaction = reactionRepository.save(reaction);
 
-        // Gửi Notification (giữ nguyên)
+        // Gửi Notification
         User progressOwner = progress.getPlanMember().getUser();
         if (typeChanged && !reactor.getId().equals(progressOwner.getId())) {
-             String reactorName = progressMapper.getUserFullName(reactor);
+             // *** THAY ĐỔI: Gọi helper method nội bộ ***
+             String reactorName = getUserFullName(reactor);
+             // *** KẾT THÚC THAY ĐỔI ***
              String message = reactorName + " đã bày tỏ cảm xúc về tiến độ ngày " + progress.getDate() + " của bạn trong kế hoạch '" + plan.getTitle() + "'.";
              String link = String.format("/plan/%s?date=%s#progress-%d", plan.getShareableLink(), progress.getDate(), progressId);
              notificationService.createNotification(progressOwner, message, link);
@@ -218,7 +226,7 @@ public class CommunityServiceImpl implements CommunityService {
         }
         // *** KẾT THÚC GỬI FEED EVENT ***
 
-        // GỬI MESSAGE WEBSOCKET UPDATE_REACTION (giữ nguyên)
+        // GỬI MESSAGE WEBSOCKET UPDATE_REACTION
         String destination = "/topic/plan/" + plan.getShareableLink() + "/community";
         Map<String, Object> simplePayload = Map.of(
             "type", "UPDATE_REACTION",
@@ -234,13 +242,13 @@ public class CommunityServiceImpl implements CommunityService {
         User user = findUserByEmail(userEmail);
         ProgressReaction reaction = reactionRepository.findByDailyProgressIdAndUserId(progressId, user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Bạn chưa thả reaction nào."));
-        Plan plan = reaction.getDailyProgress().getPlanMember().getPlan(); // Get plan
-        Integer userIdToRemove = user.getId(); // Store before deleting
+        Plan plan = reaction.getDailyProgress().getPlanMember().getPlan();
+        Integer userIdToRemove = user.getId();
 
         reactionRepository.delete(reaction);
         log.info("User {} removed reaction from progress {}", userEmail, progressId);
 
-        // GỬI MESSAGE WEBSOCKET REMOVE_REACTION (giữ nguyên)
+        // GỬI MESSAGE WEBSOCKET REMOVE_REACTION
         String destination = "/topic/plan/" + plan.getShareableLink() + "/community";
          Map<String, Object> payload = Map.of(
             "type", "REMOVE_REACTION",
@@ -263,7 +271,6 @@ public class CommunityServiceImpl implements CommunityService {
         return userIds;
     }
 
-    // Sửa lại để nhận Plan entity
     private boolean isUserMemberOfPlan(User user, Plan plan) {
          if (plan == null || plan.getMembers() == null || user == null) return false;
          plan.getMembers().size(); // Trigger load if necessary
@@ -272,15 +279,15 @@ public class CommunityServiceImpl implements CommunityService {
      }
 
     private DailyProgress findProgressById(Long id) {
-        // Fetch progress with necessary associations
+        // Fetch progress with necessary associations needed by this service
         return progressRepository.findById(id)
                 .map(p -> {
-                    // Eagerly fetch required associations if not already fetched by repository method
                     if (p.getPlanMember() != null) {
                         p.getPlanMember().getUser().getEmail(); // Fetch user
                         if (p.getPlanMember().getPlan() != null) {
-                            p.getPlanMember().getPlan().getShareableLink(); // Fetch plan essentials
-                            p.getPlanMember().getPlan().getMembers().size(); // Fetch plan members
+                            p.getPlanMember().getPlan().getShareableLink(); // Fetch plan link
+                            p.getPlanMember().getPlan().getTitle(); // Fetch plan title
+                            p.getPlanMember().getPlan().getMembers().size(); // Fetch plan members for role check
                         }
                     }
                     return p;
@@ -288,31 +295,71 @@ public class CommunityServiceImpl implements CommunityService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tiến độ với ID: " + id));
     }
 
-    private DailyProgress findProgressByIdWithDetails(Long id) {
-         return progressRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tiến độ với ID: " + id));
-     }
+    // findProgressByIdWithDetails có thể không cần thiết nữa nếu findProgressById đã fetch đủ
+    // private DailyProgress findProgressByIdWithDetails(Long id) { ... }
 
     private User findUserByEmail(String email) {
         return userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy user với email: " + email));
     }
 
-    private void ensureUserIsMemberOfPlan(User user, Plan plan) { // Sửa lại nhận Plan
+    private void ensureUserIsMemberOfPlan(User user, Plan plan) {
         if (!isUserMemberOfPlan(user, plan)) {
             throw new AccessDeniedException("Bạn không phải thành viên của kế hoạch này.");
         }
     }
 
     private ProgressComment findCommentById(Long id) {
-        // Fetch comment with progress and plan member/plan for context
         return commentRepository.findById(id)
                 .map(c -> {
-                    if (c.getDailyProgress() != null && c.getDailyProgress().getPlanMember() != null && c.getDailyProgress().getPlanMember().getPlan() != null) {
-                         c.getDailyProgress().getPlanMember().getPlan().getShareableLink(); // Fetch plan essentials
-                         c.getDailyProgress().getPlanMember().getPlan().getMembers().size(); // Fetch members for role check
+                    // Fetch các association cần thiết
+                    if (c.getDailyProgress() != null) {
+                        c.getDailyProgress().getDate(); // Fetch date
+                        if (c.getDailyProgress().getPlanMember() != null) {
+                            c.getDailyProgress().getPlanMember().getUser().getEmail(); // Fetch user
+                             if (c.getDailyProgress().getPlanMember().getPlan() != null) {
+                                 c.getDailyProgress().getPlanMember().getPlan().getShareableLink();
+                                 c.getDailyProgress().getPlanMember().getPlan().getTitle();
+                                 c.getDailyProgress().getPlanMember().getPlan().getMembers().size();
+                             }
+                        }
                     }
                     return c;
                 })
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận với ID: " + id));
     }
+
+    // --- THÊM CÁC HELPER METHOD TỪ ProgressMapper CŨ VÀO ĐÂY ---
+
+    /**
+     * Chuyển đổi ProgressComment entity sang CommentResponse DTO.
+     */
+    private CommentResponse toCommentResponse(ProgressComment comment) {
+         if (comment == null) return null;
+         User author = comment.getAuthor();
+         return CommentResponse.builder()
+                .id(comment.getId())
+                .content(comment.getContent())
+                .authorEmail(author != null ? author.getEmail() : "N/A")
+                .authorFullName(author != null ? getUserFullName(author) : "Người dùng ẩn danh")
+                // Thêm createdAt nếu có trong entity và DTO
+                // .createdAt(comment.getCreatedAt())
+                .build();
+    }
+
+    /**
+     * Lấy tên đầy đủ của User (ưu tiên Customer, sau đó Employee, cuối cùng là email).
+     */
+    private String getUserFullName(User user) {
+        if (user == null) return "N/A";
+        // Ưu tiên Customer trước
+        if (user.getCustomer() != null && user.getCustomer().getFullname() != null && !user.getCustomer().getFullname().isBlank()) {
+            return user.getCustomer().getFullname();
+        }
+        // Sau đó Employee
+        if (user.getEmployee() != null && user.getEmployee().getFullname() != null && !user.getEmployee().getFullname().isBlank()) {
+            return user.getEmployee().getFullname();
+        }
+        return user.getEmail(); // Fallback về email
+    }
+    // --- KẾT THÚC THÊM HELPER METHOD ---
 }

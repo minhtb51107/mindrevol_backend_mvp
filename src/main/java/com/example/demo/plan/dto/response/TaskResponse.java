@@ -4,9 +4,10 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
+import java.time.LocalDate; // --- THÊM IMPORT ---
 import java.time.LocalTime;
-import java.util.List; // Thêm import
-import java.util.ArrayList; // Thêm import
+import java.util.List;
+import java.util.ArrayList;
 
 @Getter
 @Setter
@@ -19,11 +20,14 @@ public class TaskResponse {
     @JsonFormat(pattern = "HH:mm")
     private LocalTime deadlineTime;
 
-    // --- THÊM CÁC TRƯỜNG NÀY ---
-    @Builder.Default // Khởi tạo list rỗng
+    // --- THÊM TRƯỜNG NÀY ---
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate taskDate;
+    // --- KẾT THÚC THÊM ---
+
+    @Builder.Default
     private List<TaskCommentResponse> comments = new ArrayList<>();
 
-    @Builder.Default // Khởi tạo list rỗng
+    @Builder.Default
     private List<TaskAttachmentResponse> attachments = new ArrayList<>();
-    // --- KẾT THÚC THÊM ---
 }

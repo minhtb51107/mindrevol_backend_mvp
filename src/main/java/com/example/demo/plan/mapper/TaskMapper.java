@@ -80,7 +80,7 @@ public class TaskMapper {
     }
 
     // --- HELPER LẤY TÊN ĐẦY ĐỦ (Giống trong các Mapper khác) ---
-    private String getUserFullName(User user) {
+    public String getUserFullName(User user) {
         if (user == null) return "N/A";
         if (user.getEmployee() != null && user.getEmployee().getFullname() != null && !user.getEmployee().getFullname().isBlank()) {
             return user.getEmployee().getFullname();

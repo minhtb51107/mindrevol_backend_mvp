@@ -1,129 +1,92 @@
 package com.example.demo.progress.mapper;
 
-import com.example.demo.progress.dto.response.DailyProgressResponse;
-import com.example.demo.progress.dto.response.DailyProgressSummaryResponse;
-import com.example.demo.progress.entity.DailyProgress;
-import org.springframework.stereotype.Component;
-import com.example.demo.community.entity.ProgressComment;
-import com.example.demo.community.entity.ProgressReaction;
-import com.example.demo.community.entity.ReactionType;
+import com.example.demo.plan.entity.PlanMember;
+import com.example.demo.plan.entity.Task;
+import com.example.demo.plan.mapper.TaskMapper;
+import com.example.demo.progress.dto.response.TimelineResponse;
+import com.example.demo.progress.entity.checkin.CheckInAttachment;
+import com.example.demo.progress.entity.checkin.CheckInEvent;
+import com.example.demo.progress.entity.checkin.CheckInTask;
 import com.example.demo.user.entity.User;
-import java.util.Arrays;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
+@RequiredArgsConstructor // Sửa để inject TaskMapper
 public class ProgressMapper {
 
-    /**
-     * Chuyển đổi DailyProgress sang DailyProgressResponse.
-     * Luôn trả về một đối tượng DTO (có thể rỗng), không bao giờ trả về null.
-     */
-    public DailyProgressResponse toDailyProgressResponse(DailyProgress dailyProgress, Integer currentUserId) {
-        // Nếu input là null, trả về một DTO rỗng (KHÔNG NULL)
-        if (dailyProgress == null) {
-            return DailyProgressResponse.builder()
-                    .id(null)
-                    .date(null) // Date sẽ được lấy từ key của map trong service
-                    .completed(false)
-                    .notes(null)
-                    .attachments(Collections.emptyList()) // Sử dụng Collections.emptyList()
-                    .comments(Collections.emptyList())
-                    .reactions(Collections.emptyList())
-                    .completedTaskIds(Collections.emptySet()) // Sử dụng Collections.emptySet()
+    private final TaskMapper taskMapper; // Cần TaskMapper để lấy tên user
+
+    // --- CÁC HÀM CŨ (toDailyProgressResponse, toDailyProgressSummaryResponse) BỊ XÓA ---
+    // --- BẮT ĐẦU CÁC HÀM MỚI ---
+
+    public TimelineResponse.CheckInEventResponse toCheckInEventResponse(CheckInEvent event) {
+        if (event == null) {
+            return null;
+        }
+
+        TimelineResponse.MemberInfo memberInfo = toMemberInfo(event.getPlanMember());
+
+        List<TimelineResponse.AttachmentResponse> attachments = event.getAttachments() == null ? Collections.emptyList() :
+                event.getAttachments().stream()
+                        .map(this::toAttachmentResponse)
+                        .collect(Collectors.toList());
+
+        List<TimelineResponse.CompletedTaskInfo> tasks = event.getCompletedTasks() == null ? Collections.emptyList() :
+                event.getCompletedTasks().stream()
+                        .map(CheckInTask::getTask) // Lấy ra Task entity
+                        .map(this::toCompletedTaskInfo) // Map sang DTO
+                        .collect(Collectors.toList());
+
+        return TimelineResponse.CheckInEventResponse.builder()
+                .id(event.getId())
+                .checkInTimestamp(event.getCheckInTimestamp())
+                .notes(event.getNotes())
+                .member(memberInfo)
+                .attachments(attachments)
+                .completedTasks(tasks)
+                .build();
+    }
+
+    public TimelineResponse.MemberInfo toMemberInfo(PlanMember member) {
+        if (member == null || member.getUser() == null) {
+            return TimelineResponse.MemberInfo.builder()
+                    .userId(null)
+                    .userEmail("N/A")
+                    .userFullName("Người dùng ẩn danh")
                     .build();
         }
-
-        List<DailyProgressResponse.CommentResponse> comments = dailyProgress.getComments() == null ? Collections.emptyList() :
-                dailyProgress.getComments().stream()
-                    .map(this::toCommentResponse)
-                    .filter(Objects::nonNull) // Lọc bỏ comment null nếu có lỗi mapper con
-                    .collect(Collectors.toList());
-
-        List<DailyProgressResponse.ReactionSummaryResponse> reactions = dailyProgress.getReactions() == null ? Collections.emptyList() :
-            Arrays.stream(ReactionType.values())
-                .map(type -> {
-                    List<ProgressReaction> reactionsOfType = dailyProgress.getReactions().stream()
-                            .filter(r -> r.getType() == type && r.getUser() != null) // Thêm check user not null
-                            .collect(Collectors.toList());
-                    if (reactionsOfType.isEmpty()) return null;
-                    boolean hasCurrentUserReacted = currentUserId != null && reactionsOfType.stream()
-                            .anyMatch(r -> r.getUser().getId().equals(currentUserId));
-                    return DailyProgressResponse.ReactionSummaryResponse.builder()
-                            .type(type.name())
-                            .count(reactionsOfType.size())
-                            .hasCurrentUserReacted(hasCurrentUserReacted)
-                            .build();
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        Set<Long> completedTaskIds = dailyProgress.getCompletedTaskIds() == null ?
-                                        Collections.emptySet() :
-                                        new HashSet<>(dailyProgress.getCompletedTaskIds());
-
-
-        return DailyProgressResponse.builder()
-                .id(dailyProgress.getId())
-                .date(dailyProgress.getDate())
-                .completed(dailyProgress.isCompleted())
-                .notes(dailyProgress.getNotes())
-                // .evidence(...) // Bỏ nếu không dùng
-                .comments(comments)
-                .reactions(reactions)
-                .completedTaskIds(completedTaskIds)
+        User user = member.getUser();
+        return TimelineResponse.MemberInfo.builder()
+                .userId(user.getId())
+                .userEmail(user.getEmail())
+                .userFullName(taskMapper.getUserFullName(user)) // Dùng lại helper từ TaskMapper
                 .build();
     }
 
-    public DailyProgressResponse toDailyProgressResponse(DailyProgress dailyProgress) {
-        return toDailyProgressResponse(dailyProgress, null);
-    }
-
-    public DailyProgressResponse.CommentResponse toCommentResponse(ProgressComment comment) {
-         if (comment == null) return null;
-         User author = comment.getAuthor();
-         return DailyProgressResponse.CommentResponse.builder()
-                .id(comment.getId())
-                .content(comment.getContent())
-                .authorEmail(author != null ? author.getEmail() : "N/A")
-                .authorFullName(author != null ? getUserFullName(author) : "Người dùng ẩn danh")
+    public TimelineResponse.AttachmentResponse toAttachmentResponse(CheckInAttachment attachment) {
+        if (attachment == null) {
+            return null;
+        }
+        return TimelineResponse.AttachmentResponse.builder()
+                .fileUrl(attachment.getFileUrl())
+                .originalFilename(attachment.getOriginalFilename())
+                .contentType(attachment.getContentType())
+                .fileSize(attachment.getFileSize())
                 .build();
     }
 
-    public String getUserFullName(User user) {
-        if (user == null) return "N/A";
-        // Ưu tiên Customer trước vì đây là user cuối
-        if (user.getCustomer() != null && user.getCustomer().getFullname() != null && !user.getCustomer().getFullname().isBlank()) {
-            return user.getCustomer().getFullname();
+    public TimelineResponse.CompletedTaskInfo toCompletedTaskInfo(Task task) {
+        if (task == null) {
+            return null;
         }
-        // Sau đó Employee
-        if (user.getEmployee() != null && user.getEmployee().getFullname() != null && !user.getEmployee().getFullname().isBlank()) {
-            return user.getEmployee().getFullname();
-        }
-        return user.getEmail(); // Fallback về email
-    }
-
-    /**
-     * Chuyển đổi DailyProgress sang DailyProgressSummaryResponse.
-     * Luôn trả về một đối tượng DTO (có thể rỗng), không bao giờ trả về null.
-     */
-    public DailyProgressSummaryResponse toDailyProgressSummaryResponse(DailyProgress dailyProgress, Integer currentUserId) {
-        // Gọi toDailyProgressResponse (đã được sửa để không trả về null)
-        DailyProgressResponse tempResponse = toDailyProgressResponse(dailyProgress, currentUserId);
-
-        // tempResponse sẽ không bao giờ null nữa, nó sẽ là DTO rỗng nếu dailyProgress là null
-        return DailyProgressSummaryResponse.builder()
-                .id(tempResponse.getId())
-                .completed(tempResponse.isCompleted())
-                .notes(tempResponse.getNotes())
-                .attachments(tempResponse.getAttachments())
-                .comments(tempResponse.getComments())
-                .reactions(tempResponse.getReactions())
-                .completedTaskIds(tempResponse.getCompletedTaskIds())
+        return TimelineResponse.CompletedTaskInfo.builder()
+                .taskId(task.getId())
+                .description(task.getDescription())
                 .build();
     }
 }
