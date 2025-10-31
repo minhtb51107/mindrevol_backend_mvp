@@ -42,14 +42,29 @@ public class ProgressMapper {
                         .map(this::toCompletedTaskInfo) // Map sang DTO
                         .collect(Collectors.toList());
 
-        return TimelineResponse.CheckInEventResponse.builder()
+        // Sử dụng Builder để xây dựng response
+        TimelineResponse.CheckInEventResponse.CheckInEventResponseBuilder builder = TimelineResponse.CheckInEventResponse.builder()
                 .id(event.getId())
                 .checkInTimestamp(event.getCheckInTimestamp())
                 .notes(event.getNotes())
                 .member(memberInfo)
                 .attachments(attachments)
-                .completedTasks(tasks)
-                .build();
+                .completedTasks(tasks);
+
+        // === THÊM MỚI LOGIC MAP ===
+        
+        // 1. Map Links
+        builder.links(event.getLinks() != null ? event.getLinks() : Collections.emptyList());
+
+        // 2. Map Comment Count (lấy size() của Set, kiểm tra null)
+        builder.commentCount(event.getComments() != null ? event.getComments().size() : 0);
+        
+        // 3. Map Reaction Count (lấy size() của Set, kiểm tra null)
+        builder.reactionCount(event.getReactions() != null ? event.getReactions().size() : 0);
+        
+        // === KẾT THÚC THÊM MỚI ===
+
+        return builder.build();
     }
 
     public TimelineResponse.MemberInfo toMemberInfo(PlanMember member) {

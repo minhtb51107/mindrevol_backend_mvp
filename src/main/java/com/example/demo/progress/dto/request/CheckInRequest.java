@@ -22,6 +22,11 @@ public class CheckInRequest {
     private List<AttachmentRequest> attachments = new ArrayList<>(); // Ảnh/file đính kèm
 
     private Set<Long> completedTaskIds = new HashSet<>(); // Danh sách ID task hoàn thành
+    
+    // === THÊM MỚI TRƯỜNG NÀY ===
+    private List<String> links = new ArrayList<>(); // Danh sách các link (URL)
+    // === KẾT THÚC THÊM MỚI ===
+
 
     // Inner class cho thông tin attachment
     @Getter

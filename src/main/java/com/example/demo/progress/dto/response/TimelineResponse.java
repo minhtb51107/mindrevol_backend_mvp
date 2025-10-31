@@ -7,7 +7,7 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
+import java.util.Set; // (Import này có trong file gốc của bạn, tôi giữ nguyên)
 
 // DTO này là một List<MemberTimeline>
 public class TimelineResponse extends java.util.ArrayList<TimelineResponse.MemberTimeline> {
@@ -47,6 +47,15 @@ public class TimelineResponse extends java.util.ArrayList<TimelineResponse.Membe
         
         @Builder.Default
         private List<CompletedTaskInfo> completedTasks = List.of();
+
+        // === THÊM MỚI 3 TRƯỜNG DƯỚI ĐÂY ===
+        @Builder.Default
+        private List<String> links = List.of(); // Danh sách links
+        
+        private int commentCount; // Tổng số bình luận
+        
+        private int reactionCount; // Tổng số cảm xúc
+        // === KẾT THÚC THÊM MỚI ===
     }
 
     @Getter

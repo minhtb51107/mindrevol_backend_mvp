@@ -8,5 +8,14 @@ import java.util.Optional;
 
 @Repository
 public interface ProgressReactionRepository extends JpaRepository<ProgressReaction, Long> {
-    Optional<ProgressReaction> findByDailyProgressIdAndUserId(Long dailyProgressId, Integer userId);
+    
+    // === THAY ĐỔI PHƯƠNG THỨC TRUY VẤN ===
+    //
+    // TÊN CŨ: 
+    // Optional<ProgressReaction> findByDailyProgressIdAndUserId(Long dailyProgressId, Integer userId);
+    //
+    // TÊN MỚI (và tham số mới):
+    Optional<ProgressReaction> findByCheckInEventIdAndUserId(Long checkInEventId, Integer userId);
+    //
+    // === KẾT THÚC THAY ĐỔI ===
 }

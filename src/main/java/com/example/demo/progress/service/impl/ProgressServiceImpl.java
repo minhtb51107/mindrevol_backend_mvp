@@ -110,6 +110,15 @@ public class ProgressServiceImpl implements ProgressService {
             }
         }
         
+        // === THÊM MỚI: 3. Xử lý Links ===
+        if (request.getLinks() != null && !request.getLinks().isEmpty()) {
+            List<String> validLinks = request.getLinks().stream()
+                    .filter(link -> link != null && !link.trim().isEmpty())
+                    .collect(Collectors.toList());
+            checkInEvent.setLinks(validLinks);
+        }
+        // === KẾT THÚC THÊM MỚI ===
+
         // Lưu sự kiện
         CheckInEvent savedEvent = checkInEventRepository.save(checkInEvent);
         log.info("User {} created CheckInEvent ID {} for plan {}", userEmail, savedEvent.getId(), shareableLink);

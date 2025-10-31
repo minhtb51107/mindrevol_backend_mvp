@@ -1,17 +1,16 @@
 package com.example.demo.progress.entity;
 
 import com.example.demo.plan.entity.PlanMember;
-// Bỏ import EvidenceAttachment nếu không dùng nữa
+// import com.example.demo.community.entity.ProgressComment; // <-- ĐÃ XÓA
+// import com.example.demo.community.entity.ProgressReaction; // <-- ĐÃ XÓA
 import jakarta.persistence.*;
 import lombok.*;
-import com.example.demo.community.entity.ProgressComment;
-import com.example.demo.community.entity.ProgressReaction;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.HashSet; // *** THAY ĐỔI IMPORT TỪ List SANG Set ***
+import java.util.HashSet; 
 import java.util.List;
-import java.util.Set; // *** THAY ĐỔI IMPORT TỪ List SANG Set ***
+import java.util.Set; 
 
 
 @Getter
@@ -46,19 +45,20 @@ public class DailyProgress {
     @CollectionTable(name = "daily_progress_evidence", joinColumns = @JoinColumn(name = "daily_progress_id"))
     @Column(name = "evidence_link", columnDefinition = "TEXT")
     @Builder.Default
-    private List<String> evidence = new ArrayList<>(); // Giữ là List vì @ElementCollection thường dùng với List
+    private List<String> evidence = new ArrayList<>(); 
 
-    // Giữ lại comment là List (thứ tự comment quan trọng)
+    // === XÓA BỎ CÁC LIÊN KẾT GÂY LỖI ===
+    /*
     @OneToMany(mappedBy = "dailyProgress", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("createdAt ASC") // Thêm OrderBy để đảm bảo thứ tự
+    @OrderBy("createdAt ASC") 
     @Builder.Default
     private List<ProgressComment> comments = new ArrayList<>();
 
-    // *** THAY ĐỔI List<ProgressReaction> thành Set<ProgressReaction> ***
     @OneToMany(mappedBy = "dailyProgress", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<ProgressReaction> reactions = new HashSet<>();
-    // *** KẾT THÚC THAY ĐỔI ***
+    */
+    // === KẾT THÚC XÓA BỎ ===
 
     // Giữ lại completedTaskIds là Set
     @ElementCollection(fetch = FetchType.LAZY)
@@ -67,5 +67,4 @@ public class DailyProgress {
     @Builder.Default
     private Set<Long> completedTaskIds = new HashSet<>();
 
-    // Bỏ các phương thức add/removeAttachment nếu đã xóa field attachments
 }

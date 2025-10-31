@@ -8,30 +8,27 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set; // Import Set nếu muốn dùng trong tên phương thức, nhưng không bắt buộc
+import java.util.Set; 
 
 @Repository
 public interface CheckInEventRepository extends JpaRepository<CheckInEvent, Long> {
 
     /**
      * Lấy tất cả các sự kiện check-in cho một plan trong một khoảng thời gian,
-     * fetch kèm theo thông tin thành viên, task, attachment để tránh N+1 query.
-     * Dùng Set thay vì List trong JOIN FETCH để tránh MultipleBagFetchException.
-     * Sử dụng LEFT JOIN FETCH để đảm bảo trả về CheckInEvent ngay cả khi không có attachment hoặc task.
-     * Sử dụng DISTINCT để đảm bảo mỗi CheckInEvent chỉ trả về một lần.
+     * fetch kèm theo thông tin thành viên, task, attachment VÀ LINKS để tránh N+1 query.
      */
     @Query("SELECT DISTINCT cie FROM CheckInEvent cie " +
            "LEFT JOIN FETCH cie.planMember pm " +
-           "LEFT JOIN FETCH pm.user " + // Fetch user từ PlanMember
-           "LEFT JOIN FETCH cie.attachments att " + // Fetch attachments (giờ là Set)
-           "LEFT JOIN FETCH cie.completedTasks ct " + // Fetch completedTasks (giờ là Set)
-           "LEFT JOIN FETCH ct.task " + // Fetch Task từ CheckInTask
+           "LEFT JOIN FETCH pm.user " + 
+           "LEFT JOIN FETCH cie.attachments att " + 
+           "LEFT JOIN FETCH cie.completedTasks ct " + 
+           "LEFT JOIN FETCH ct.task " +
+           "LEFT JOIN FETCH cie.links " + // <-- THÊM MỚI DÒNG NÀY ĐỂ SỬA LỖI "no Session"
            "WHERE pm.plan.id = :planId AND cie.checkInTimestamp BETWEEN :start AND :end " +
-           "ORDER BY cie.checkInTimestamp ASC") // Sắp xếp kết quả cuối cùng
+           "ORDER BY cie.checkInTimestamp ASC") 
     List<CheckInEvent> findByPlanIdAndTimestampBetweenWithDetails(
             @Param("planId") Long planId,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end);
 
-    // Có thể thêm các query khác nếu cần sau này
 }
