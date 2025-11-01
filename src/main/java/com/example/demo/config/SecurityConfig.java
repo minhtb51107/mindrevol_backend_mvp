@@ -1,3 +1,4 @@
+// File: src/main/java/com/example/demo/config/SecurityConfig.java
 package com.example.demo.config;
 
 import com.example.demo.config.security.CustomAuthenticationEntryPoint;
@@ -6,7 +7,7 @@ import com.example.demo.config.security.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod; 
+import org.springframework.http.HttpMethod; // Đảm bảo import này
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -84,6 +85,12 @@ public class SecurityConfig {
                         
                 ).permitAll()
                 
+                // --- THÊM DÒNG NÀY ĐỂ CHO PHÉP PREFLIGHT OPTIONS ---
+                .requestMatchers(HttpMethod.OPTIONS).permitAll()
+                // --- KẾT THÚC DÒNG MỚI ---
+
+                .requestMatchers(HttpMethod.POST, "/api/v1/files/upload").authenticated()
+                
                 // Mọi request khác đều cần xác thực
                 .anyRequest().authenticated()
             );
@@ -97,7 +104,8 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         // Cấu hình CORS của bạn
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173", "http://127.0.D.1:5173")); 
+        // Lỗi IP: "127.0.D.1" phải là "127.0.0.1"
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173", "http://127.0.0.1:5173")); 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type", "X-Requested-With", "Accept"));
         configuration.setAllowCredentials(true);

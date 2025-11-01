@@ -55,6 +55,8 @@ public class TimelineResponse extends java.util.ArrayList<TimelineResponse.Membe
         private int commentCount; // Tổng số bình luận
         
         private int reactionCount; // Tổng số cảm xúc
+        
+        private List<Long> completedTaskIds;
         // === KẾT THÚC THÊM MỚI ===
     }
 
