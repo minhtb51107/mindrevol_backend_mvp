@@ -4,7 +4,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.LocalDateTime; // Thêm nếu bạn có trường createdAt
+// import java.time.LocalDateTime; // Đổi sang Instant để tương thích JSON/JS
+import java.time.Instant; 
 
 @Getter
 @Setter
@@ -14,5 +15,15 @@ public class CommentResponse {
     private String content;
     private String authorEmail;
     private String authorFullName;
-    // private LocalDateTime createdAt; // Thêm nếu cần
+    
+    // --- THÊM CÁC TRƯỜNG SAU ---
+    
+    // Cần thiết cho logic Sửa/Xóa ở Frontend (CommentSection.vue)
+    private Integer authorId; 
+
+    // Cần thiết để Frontend hiển thị "5 phút trước" (CommentSection.vue)
+    private Instant createdAt;
+    
+    // Thêm trường này để Frontend biết comment được liên kết với CheckInEvent nào
+    private Long checkInEventId; 
 }

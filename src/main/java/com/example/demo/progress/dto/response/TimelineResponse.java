@@ -1,5 +1,7 @@
 package com.example.demo.progress.dto.response;
 
+import com.example.demo.community.dto.response.CommentResponse; // THÊM IMPORT NÀY
+import com.example.demo.community.entity.ReactionType; // THÊM IMPORT NÀY
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 import lombok.Getter;
@@ -57,6 +59,14 @@ public class TimelineResponse extends java.util.ArrayList<TimelineResponse.Membe
         private int reactionCount; // Tổng số cảm xúc
         
         private List<Long> completedTaskIds;
+        
+        @Builder.Default
+        private List<CommentResponse> comments = List.of();
+
+        @Builder.Default
+        private List<ReactionResponse> reactions = List.of();
+        
+        
         // === KẾT THÚC THÊM MỚI ===
     }
 
@@ -76,5 +86,14 @@ public class TimelineResponse extends java.util.ArrayList<TimelineResponse.Membe
     public static class CompletedTaskInfo {
         private Long taskId;
         private String description;
+    }
+    
+    @Getter
+    @Setter
+    @Builder
+    public static class ReactionResponse {
+        private ReactionType type;
+        private int count;
+        private boolean hasCurrentUserReacted;
     }
 }

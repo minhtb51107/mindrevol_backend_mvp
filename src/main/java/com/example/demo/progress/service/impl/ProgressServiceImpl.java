@@ -1,6 +1,7 @@
+// File: src/main/java/com/example/demo/progress/service/impl/ProgressServiceImpl.java
 package com.example.demo.progress.service.impl;
 
-import com.example.demo.feed.service.FeedService; // Vẫn giữ để gửi feed
+import com.example.demo.feed.service.FeedService; 
 import com.example.demo.plan.entity.Plan;
 import com.example.demo.plan.entity.PlanMember;
 import com.example.demo.plan.entity.Task;
@@ -28,11 +29,9 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// --- CÁC IMPORT MỚI ---
 import com.example.demo.progress.dto.request.UpdateCheckInRequest;
-import com.example.demo.progress.repository.CheckInTaskRepository; // (Cần cho việc xóa task)
+import com.example.demo.progress.repository.CheckInTaskRepository; 
 import java.time.Duration;
-// --- KẾT THÚC IMPORT MỚI ---
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -44,9 +43,24 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+// --- CÁC IMPORT MỚI ĐỂ XỬ LÝ COMMENT/REACTION ---
+import com.example.demo.community.dto.request.AddReactionRequest;
+import com.example.demo.community.dto.request.PostCommentRequest;
+import com.example.demo.community.dto.request.UpdateCommentRequest;
+import com.example.demo.community.dto.response.CommentResponse;
+import com.example.demo.community.entity.ProgressComment;
+import com.example.demo.community.entity.ProgressReaction;
+import com.example.demo.community.entity.ReactionType;
+import com.example.demo.community.mapper.CommentMapper;
+import com.example.demo.community.repository.ProgressCommentRepository;
+import com.example.demo.community.repository.ProgressReactionRepository;
+import java.time.Instant; // Dùng Instant cho comment
+import java.util.Optional;
+// --- KẾT THÚC IMPORT MỚI ---
+
 @Slf4j
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor // Lombok sẽ tự động inject các dependencies
 @Transactional
 public class ProgressServiceImpl implements ProgressService {
 
@@ -59,18 +73,21 @@ public class ProgressServiceImpl implements ProgressService {
     private final SimpMessagingTemplate messagingTemplate;
     private final FeedService feedService;
     private final CheckInEventRepository checkInEventRepository;
-    
-    // --- (MỚI) Dependency ---
-    private final CheckInTaskRepository checkInTaskRepository; // Cần để xóa liên kết task
+    private final CheckInTaskRepository checkInTaskRepository;
+
+    // --- THÊM CÁC DEPENDENCIES TỪ PACKAGE 'community' ---
+    private final ProgressCommentRepository progressCommentRepository;
+    private final ProgressReactionRepository progressReactionRepository;
+    private final CommentMapper commentMapper; // Sẽ cần file này
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    
-    // --- (MỚI) Hằng số thời gian ân hạn ---
-    private static final long EDIT_GRACE_PERIOD_HOURS = 24; // 24 giờ
+    private static final long EDIT_GRACE_PERIOD_HOURS = 24;
 
 
+    // --- HÀM createCheckIn (Giữ nguyên) ---
     @Override
     public TimelineResponse.CheckInEventResponse createCheckIn(String shareableLink, String userEmail, CheckInRequest request) {
+        // (Nội dung hàm của bạn giữ nguyên)
         Plan plan = findPlanByShareableLink(shareableLink);
         User user = findUserByEmail(userEmail);
         PlanMember member = findMemberByUserAndPlan(user, plan);
@@ -83,6 +100,7 @@ public class ProgressServiceImpl implements ProgressService {
                 .notes(request.getNotes())
                 .build();
 
+        // (Logic xử lý Attachments, Tasks, Links giữ nguyên...)
         // 1. Xử lý Attachments
         if (request.getAttachments() != null) {
             for (CheckInRequest.AttachmentRequest attReq : request.getAttachments()) {
@@ -138,19 +156,17 @@ public class ProgressServiceImpl implements ProgressService {
         messagingTemplate.convertAndSend(destination, payload);
         log.info("Sent WebSocket update to {} for new CheckInEvent ID {}", destination, savedEvent.getId());
         
-        // (Gửi Feed Event)
-        // feedService.createAndPublishFeedEvent(FeedEventType.CHECK_IN, user, plan, null);
-
         return response;
     }
 
-
+    // --- HÀM getDailyTimeline (Giữ nguyên) ---
     @Override
     @Transactional(readOnly = true)
     public TimelineResponse getDailyTimeline(String shareableLink, String userEmail, LocalDate date) {
+        // (Nội dung hàm của bạn giữ nguyên)
         Plan plan = findPlanByShareableLink(shareableLink);
         User user = findUserByEmail(userEmail);
-        findMemberByUserAndPlan(user, plan); // Check quyền
+        findMemberByUserAndPlan(user, plan); 
 
         LocalDateTime startOfDay = date.atStartOfDay();
         LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
@@ -180,22 +196,16 @@ public class ProgressServiceImpl implements ProgressService {
         return timelineResponse;
     }
     
-    // --- (MỚI) HÀM LOGIC SỬA CHECK-IN ---
+    // --- HÀM updateCheckIn (Giữ nguyên) ---
     @Override
     @Transactional
     public TimelineResponse.CheckInEventResponse updateCheckIn(Long checkInEventId, UpdateCheckInRequest request, String userEmail) {
+        // (Nội dung hàm của bạn giữ nguyên)
         User currentUser = findUserByEmail(userEmail);
-        
-        // 1. Tìm CheckInEvent gốc
         CheckInEvent event = checkInEventRepository.findById(checkInEventId)
                 .orElseThrow(() -> new ResourceNotFoundException("CheckInEvent not found with id: " + checkInEventId));
-
-        // 2. Xác thực (Authorization)
-        validateCheckInModification(event, currentUser); // (Xem hàm helper bên dưới)
-
-        // 3. Cập nhật các trường đơn giản
+        validateCheckInModification(event, currentUser); 
         event.setNotes(request.getNotes());
-        // (Lọc link rỗng)
         if (request.getLinks() != null) {
             event.setLinks(request.getLinks().stream()
                     .filter(link -> link != null && !link.trim().isEmpty())
@@ -203,98 +213,181 @@ public class ProgressServiceImpl implements ProgressService {
         } else {
             event.setLinks(Collections.emptyList());
         }
-        // (V1 không hỗ trợ sửa attachments)
-
-        // 4. Cập nhật các Task đã hoàn thành
-        // (Do có orphanRemoval = true, chúng ta chỉ cần clear() và add())
-        
-        // 4.1. Xóa các liên kết task cũ
-        // (Lưu ý: Cần xóa thủ công khỏi repo trung gian NẾU orphanRemoval không hoạt động)
-        // (Cách an toàn: Xóa thủ công)
         checkInTaskRepository.deleteAll(event.getCompletedTasks());
-        event.getCompletedTasks().clear(); // Xóa khỏi Set
-
-        // 4.2. Thêm các liên kết task mới (nếu có)
+        event.getCompletedTasks().clear(); 
         if (request.getCompletedTaskIds() != null && !request.getCompletedTaskIds().isEmpty()) {
             Set<Long> taskIds = request.getCompletedTaskIds().stream().collect(Collectors.toSet());
             List<Task> validTasks = taskRepository.findAllById(taskIds).stream()
                     .filter(task -> task.getPlan().getId().equals(event.getPlanMember().getPlan().getId()))
                     .collect(Collectors.toList());
-            
             for (Task task : validTasks) {
                 CheckInTask checkInTask = CheckInTask.builder()
                         .task(task)
                         .build();
-                event.addTask(checkInTask); // Thêm vào Set
+                event.addTask(checkInTask);
             }
         }
-        
         CheckInEvent updatedEvent = checkInEventRepository.save(event);
-        
-        // (Nếu bạn có logic FeedService, hãy cập nhật sự kiện feed)
-        // feedService.createAndPublishFeedEvent(FeedEventType.CHECKIN_UPDATED, updatedEvent.getPlanMember().getUser(), updatedEvent.getPlanMember().getPlan(), null);
-
-        // 5. Gửi WebSocket (quan trọng)
         TimelineResponse.CheckInEventResponse response = progressMapper.toCheckInEventResponse(updatedEvent);
         String topic = "/topic/plan/" + event.getPlanMember().getPlan().getShareableLink() + "/progress";
-        
         messagingTemplate.convertAndSend(topic, 
              Map.of("type", "UPDATE_CHECK_IN", "checkInEvent", response)
         );
-        
         log.info("User {} updated CheckInEvent ID {}", userEmail, updatedEvent.getId());
         return response;
     }
 
-    // --- (MỚI) HÀM LOGIC XÓA CHECK-IN ---
+    // --- HÀM deleteCheckIn (Giữ nguyên) ---
     @Override
     @Transactional
     public void deleteCheckIn(Long checkInEventId, String userEmail) {
+        // (Nội dung hàm của bạn giữ nguyên)
         User currentUser = findUserByEmail(userEmail);
-        
-        // 1. Tìm CheckInEvent gốc
         CheckInEvent event = checkInEventRepository.findById(checkInEventId)
                 .orElseThrow(() -> new ResourceNotFoundException("CheckInEvent not found with id: " + checkInEventId));
-
-        // 2. Xác thực (Authorization)
         validateCheckInModification(event, currentUser);
-
         String shareableLink = event.getPlanMember().getPlan().getShareableLink();
-
-        // 3. Xóa sự kiện
-        checkInEventRepository.delete(event); // CascadeType.ALL và orphanRemoval=true sẽ xóa CheckInTask, CheckInAttachment...
-
-        // (Nếu bạn có logic FeedService, hãy xóa sự kiện feed)
-        // feedService.deleteFeedEvent(event.getId(), FeedEventType.CHECKIN_CREATED);
-        // feedService.deleteFeedEvent(event.getId(), FeedEventType.CHECKIN_UPDATED);
-
-        // 4. Gửi WebSocket
+        checkInEventRepository.delete(event); 
         String topic = "/topic/plan/" + shareableLink + "/progress";
         messagingTemplate.convertAndSend(topic, 
             Map.of("type", "DELETE_CHECK_IN", "checkInEventId", checkInEventId)
         );
         log.info("User {} deleted CheckInEvent ID {}", userEmail, checkInEventId);
     }
-
-    // --- (MỚI) HÀM HELPER XÁC THỰC (ĐÃ SỬA LỖI Instant.now()) ---
+    
+    // --- HÀM validateCheckInModification (Giữ nguyên) ---
     private void validateCheckInModification(CheckInEvent event, User currentUser) {
-        // 1. User có phải là chủ sở hữu của check-in không?
+        // (Nội dung hàm của bạn giữ nguyên)
         if (!event.getPlanMember().getUser().getId().equals(currentUser.getId())) {
             throw new AccessDeniedException("User is not the owner of this check-in.");
         }
-
-        // 2. Check-in có còn trong thời gian ân hạn 24 giờ không?
-        // (Sửa: So sánh LocalDateTime với LocalDateTime)
-        LocalDateTime checkInTime = event.getCheckInTimestamp(); // (Giả định đã ở múi giờ VN)
-        LocalDateTime now = LocalDateTime.now(VIETNAM_ZONE); // Lấy giờ hiện tại ở VN
-        
+        LocalDateTime checkInTime = event.getCheckInTimestamp(); 
+        LocalDateTime now = LocalDateTime.now(VIETNAM_ZONE); 
         if (Duration.between(checkInTime, now).toHours() >= EDIT_GRACE_PERIOD_HOURS) {
             throw new BadRequestException("Check-in can no longer be modified after " + EDIT_GRACE_PERIOD_HOURS + " hours.");
         }
     }
 
-    // --- (Các hàm Stats/Chart và Helper cũ giữ nguyên) ---
 
+    // === TRIỂN KHAI CÁC HÀM MỚI (ĐÃ SỬA LỖI) ===
+
+    @Override
+    @Transactional
+    public CommentResponse addCommentToCheckIn(Long checkInEventId, PostCommentRequest request, String userEmail) {
+        User user = findUserByEmail(userEmail);
+        CheckInEvent event = checkInEventRepository.findById(checkInEventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy CheckInEvent: " + checkInEventId));
+
+        ProgressComment comment = ProgressComment.builder()
+                .checkInEvent(event)
+                // SỬA LỖI 1: Dùng 'author' thay vì 'user'
+                .author(user) //
+                .content(request.getContent())
+                .createdAt(Instant.now().atOffset(ZoneId.of("Asia/Ho_Chi_Minh").getRules().getOffset(Instant.now()))) // Sửa từ Instant -> OffsetDateTime
+                .build();
+
+        ProgressComment savedComment = progressCommentRepository.save(comment);
+        log.info("User {} đã thêm bình luận {} vào CheckInEvent {}", userEmail, savedComment.getId(), checkInEventId);
+        
+        // Gửi WebSocket
+        String topic = "/topic/plan/" + event.getPlanMember().getPlan().getShareableLink() + "/progress";
+        messagingTemplate.convertAndSend(topic, 
+             Map.of("type", "NEW_CHECKIN_COMMENT", "checkInEventId", checkInEventId)
+        );
+
+        return commentMapper.toCommentResponse(savedComment);
+    }
+
+    @Override
+    @Transactional
+    public CommentResponse updateCheckInComment(Long commentId, UpdateCommentRequest request, String userEmail) {
+        User user = findUserByEmail(userEmail);
+        ProgressComment comment = progressCommentRepository.findById(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận: " + commentId));
+
+        // SỬA LỖI 1: Dùng 'getAuthor()' thay vì 'getUser()'
+        if (!comment.getAuthor().getId().equals(user.getId())) { //
+            throw new AccessDeniedException("Bạn không phải là tác giả của bình luận này.");
+        }
+        
+        comment.setContent(request.getContent());
+        ProgressComment updatedComment = progressCommentRepository.save(comment);
+        log.info("User {} đã cập nhật bình luận {}", userEmail, commentId);
+
+        // Gửi WebSocket
+        String topic = "/topic/plan/" + comment.getCheckInEvent().getPlanMember().getPlan().getShareableLink() + "/progress";
+        messagingTemplate.convertAndSend(topic, 
+             Map.of("type", "UPDATE_CHECKIN_COMMENT", "checkInEventId", comment.getCheckInEvent().getId())
+        );
+
+        return commentMapper.toCommentResponse(updatedComment);
+    }
+
+    @Override
+    @Transactional
+    public void deleteCheckInComment(Long commentId, String userEmail) {
+        User user = findUserByEmail(userEmail);
+        ProgressComment comment = progressCommentRepository.findById(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận: " + commentId));
+        
+        CheckInEvent event = comment.getCheckInEvent();
+
+        // SỬA LỖI 1: Dùng 'getAuthor()' thay vì 'getUser()'
+        boolean isAuthor = comment.getAuthor().getId().equals(user.getId()); //
+        boolean isPlanOwner = event.getPlanMember().getPlan().getCreator().getId().equals(user.getId());
+        
+        if (!isAuthor && !isPlanOwner) {
+            throw new AccessDeniedException("Bạn không có quyền xóa bình luận này.");
+        }
+
+        progressCommentRepository.delete(comment);
+        log.info("User {} đã xóa bình luận {}", userEmail, commentId);
+        
+        // Gửi WebSocket
+        String topic = "/topic/plan/" + event.getPlanMember().getPlan().getShareableLink() + "/progress";
+        messagingTemplate.convertAndSend(topic, 
+             Map.of("type", "DELETE_CHECKIN_COMMENT", "checkInEventId", event.getId())
+        );
+    }
+
+    @Override
+    @Transactional
+    public void toggleReactionOnCheckIn(Long checkInEventId, AddReactionRequest request, String userEmail) {
+        User user = findUserByEmail(userEmail);
+        CheckInEvent event = checkInEventRepository.findById(checkInEventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy CheckInEvent: " + checkInEventId));
+        
+        // SỬA LỖI 2: Dùng 'getReactionType()' thay vì 'getType()'
+        ReactionType type = request.getReactionType(); //
+
+        // SỬA LỖI 3: Dùng phương thức đã có (findByCheckInEventIdAndUserIdAndType)
+        Optional<ProgressReaction> existingReaction = progressReactionRepository
+                .findByCheckInEventIdAndUserIdAndType(checkInEventId, user.getId(), type);
+
+        if (existingReaction.isPresent()) {
+            // Đã reaction -> Xóa (toggle off)
+            progressReactionRepository.delete(existingReaction.get());
+            log.info("User {} đã xóa reaction {} khỏi CheckInEvent {}", userEmail, type, checkInEventId);
+        } else {
+            // Chưa reaction -> Thêm (toggle on)
+            ProgressReaction newReaction = ProgressReaction.builder()
+                    .checkInEvent(event)
+                    .user(user) // Giả định trường này tên là 'user' (dựa theo repo)
+                    .type(type)
+                    .build();
+            progressReactionRepository.save(newReaction);
+            log.info("User {} đã thêm reaction {} vào CheckInEvent {}", userEmail, type, checkInEventId);
+        }
+        
+        // Gửi WebSocket
+        String topic = "/topic/plan/" + event.getPlanMember().getPlan().getShareableLink() + "/progress";
+        messagingTemplate.convertAndSend(topic, 
+             Map.of("type", "UPDATE_CHECKIN_REACTION", "checkInEventId", checkInEventId)
+        );
+    }
+
+
+    // --- (Các hàm Stats/Chart và Helper cũ giữ nguyên) ---
     @Override
     @Transactional(readOnly = true)
     public UserStatsResponse getUserStats(String userEmail) {

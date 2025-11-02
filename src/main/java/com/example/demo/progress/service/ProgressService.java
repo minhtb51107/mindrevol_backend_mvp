@@ -1,3 +1,4 @@
+// File: src/main/java/com/example/demo/progress/service/ProgressService.java
 package com.example.demo.progress.service;
 
 import com.example.demo.progress.dto.request.CheckInRequest;
@@ -7,7 +8,12 @@ import com.example.demo.progress.dto.response.ProgressChartDataResponse;
 
 // --- CÁC IMPORT MỚI ---
 import com.example.demo.progress.dto.request.UpdateCheckInRequest;
-import com.example.demo.user.entity.User; // (Sử dụng User object sẽ tốt hơn)
+import com.example.demo.user.entity.User;
+// --- IMPORT CÁC DTO TỪ PACKAGE 'community' MÀ BẠN ĐÃ CÓ ---
+import com.example.demo.community.dto.request.AddReactionRequest;
+import com.example.demo.community.dto.request.PostCommentRequest;
+import com.example.demo.community.dto.request.UpdateCommentRequest;
+import com.example.demo.community.dto.response.CommentResponse;
 // --- KẾT THÚC IMPORT MỚI ---
 
 import java.time.LocalDate;
@@ -15,37 +21,36 @@ import java.util.List;
 
 public interface ProgressService {
 
-    /**
-     * Thực hiện một lần check-in (tạo Card Task trên Timeline).
-     */
+    // --- CÁC HÀM GỐC (Giữ nguyên) ---
     TimelineResponse.CheckInEventResponse createCheckIn(String shareableLink, String userEmail, CheckInRequest request);
-
-    /**
-     * Lấy dữ liệu Timeline (Cột Giữa) cho một ngày cụ thể.
-     */
     TimelineResponse getDailyTimeline(String shareableLink, String userEmail, LocalDate date);
+    TimelineResponse.CheckInEventResponse updateCheckIn(Long checkInEventId, UpdateCheckInRequest request, String userEmail);
+    void deleteCheckIn(Long checkInEventId, String userEmail);
 
-    
-    // --- CÁC PHƯƠNG THỨC NÀY CẦN ĐƯỢC ĐỊNH NGHĨA LẠI ---
+    // --- CÁC PHƯƠƠNG THỨC STATS/CHART (Giữ nguyên) ---
     UserStatsResponse getUserStats(String userEmail);
-
     List<ProgressChartDataResponse> getProgressChartData(String userEmail);
     
-    // --- (MỚI) HÀM SỬA VÀ XÓA CHECK-IN ---
+
+    // === THÊM CÁC HÀM MỚI CHO COMMENT VÀ REACTION ===
     
     /**
-     * Cập nhật một CheckInEvent đã tồn tại.
-     * @param checkInEventId ID của check-in
-     * @param request DTO chứa thông tin cập nhật
-     * @param userEmail Email của user đang thực hiện (để xác thực)
-     * @return CheckInEvent đã được cập nhật
+     * Thêm bình luận vào một CheckInEvent.
      */
-    TimelineResponse.CheckInEventResponse updateCheckIn(Long checkInEventId, UpdateCheckInRequest request, String userEmail);
-
+    CommentResponse addCommentToCheckIn(Long checkInEventId, PostCommentRequest request, String userEmail);
+    
     /**
-     * Xóa một CheckInEvent.
-     * @param checkInEventId ID của check-in
-     * @param userEmail Email của user đang thực hiện (để xác thực)
+     * Cập nhật một bình luận đã tồn tại.
      */
-    void deleteCheckIn(Long checkInEventId, String userEmail);
+    CommentResponse updateCheckInComment(Long commentId, UpdateCommentRequest request, String userEmail);
+    
+    /**
+     * Xóa một bình luận.
+     */
+    void deleteCheckInComment(Long commentId, String userEmail);
+    
+    /**
+     * Thêm/xóa (toggle) một reaction trên một CheckInEvent.
+     */
+    void toggleReactionOnCheckIn(Long checkInEventId, AddReactionRequest request, String userEmail);
 }

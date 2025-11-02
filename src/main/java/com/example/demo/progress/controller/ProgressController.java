@@ -1,3 +1,4 @@
+// File: src/main/java/com/example/demo/progress/controller/ProgressController.java
 package com.example.demo.progress.controller;
 
 import com.example.demo.progress.dto.request.CheckInRequest;
@@ -15,38 +16,38 @@ import java.time.LocalDate;
 
 // --- CÁC IMPORT MỚI ---
 import com.example.demo.progress.dto.request.UpdateCheckInRequest;
-import com.example.demo.progress.dto.response.TimelineResponse; // (Để định kiểu trả về)
+import com.example.demo.progress.dto.response.TimelineResponse;
 import com.example.demo.user.entity.User;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
+// --- IMPORT CÁC DTO TỪ PACKAGE 'community' MÀ BẠN ĐÃ CÓ ---
+import com.example.demo.community.dto.request.PostCommentRequest;
+import com.example.demo.community.dto.request.UpdateCommentRequest;
+import com.example.demo.community.dto.request.AddReactionRequest;
+import com.example.demo.community.dto.response.CommentResponse;
 // --- KẾT THÚC IMPORT MỚI ---
 
 @RestController
-@RequestMapping("/api/v1/plans/{shareableLink}/progress") // (Đường dẫn gốc của bạn)
+@RequestMapping("/api/v1/plans/{shareableLink}/progress")
 @RequiredArgsConstructor
 public class ProgressController {
 
     private final ProgressService progressService;
 
-    /**
-     * Endpoint mới: Thực hiện Check-in
-     */
+    // --- CÁC HÀM GỐC CỦA BẠN (Giữ nguyên) ---
     @PostMapping("/check-in")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<TimelineResponse.CheckInEventResponse> createCheckIn( // (Sửa kiểu trả về cho rõ ràng)
+    public ResponseEntity<TimelineResponse.CheckInEventResponse> createCheckIn(
             @PathVariable String shareableLink,
             @Valid @RequestBody CheckInRequest request,
             Authentication authentication) {
         String userEmail = authentication.getName();
-        // Trả về 201 CREATED
         return new ResponseEntity<>(progressService.createCheckIn(shareableLink, userEmail, request), HttpStatus.CREATED);
     }
 
-    /**
-     * Endpoint mới: Lấy dữ liệu Timeline cho một ngày
-     */
     @GetMapping("/timeline")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<TimelineResponse> getDailyTimeline( // (Sửa kiểu trả về cho rõ ràng)
+    public ResponseEntity<TimelineResponse> getDailyTimeline(
             @PathVariable String shareableLink,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             Authentication authentication) {
@@ -54,70 +55,96 @@ public class ProgressController {
         return ResponseEntity.ok(progressService.getDailyTimeline(shareableLink, userEmail, date));
     }
 
- // --- (MỚI) ENDPOINT SỬA CHECK-IN ---
     @PutMapping("/check-in/{checkInEventId}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<TimelineResponse.CheckInEventResponse> updateCheckIn(
             @PathVariable String shareableLink, 
             @PathVariable Long checkInEventId,
             @Valid @RequestBody UpdateCheckInRequest request,
-            // --- (CŨ) ---
-            // @AuthenticationPrincipal User currentUser) { 
-            // 
-            // TimelineResponse.CheckInEventResponse updatedEvent = progressService.updateCheckIn(checkInEventId, request, currentUser.getEmail());
-            // return ResponseEntity.ok(updatedEvent);
-            // }
-            
-            // --- (MỚI) ---
-            Authentication authentication) { // Thay @AuthenticationPrincipal bằng Authentication
-        
-        // Lấy email giống như các hàm khác
+            Authentication authentication) { 
         String userEmail = authentication.getName(); 
-        
         TimelineResponse.CheckInEventResponse updatedEvent = progressService.updateCheckIn(checkInEventId, request, userEmail);
         return ResponseEntity.ok(updatedEvent);
     }
 
- // --- (MỚI) ENDPOINT XÓA CHECK-IN ---
     @DeleteMapping("/check-in/{checkInEventId}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> deleteCheckIn(
             @PathVariable String shareableLink, 
             @PathVariable Long checkInEventId,
-            // --- (CŨ) ---
-            // @AuthenticationPrincipal User currentUser) { 
-            // 
-            // progressService.deleteCheckIn(checkInEventId, currentUser.getEmail());
-            // return ResponseEntity.noContent().build(); 
-            // }
-            
-            // --- (MỚI) ---
-            Authentication authentication) { // Thay @AuthenticationPrincipal bằng Authentication
-        
-        // Lấy email giống như các hàm khác
+            Authentication authentication) { 
         String userEmail = authentication.getName();
-        
         progressService.deleteCheckIn(checkInEventId, userEmail);
-        return ResponseEntity.noContent().build(); // 204 No Content
+        return ResponseEntity.noContent().build(); 
     }
 
+    
+    // === THÊM CÁC API MỚI CHO COMMENT VÀ REACTION ===
 
-    // --- CÁC ENDPOINT CŨ BỊ XÓA ---
-    // (POST / và GET /dashboard đã bị thay thế)
-    
-    // --- CÁC ENDPOINT STATS/CHART ---
-    // (Phần này giữ nguyên như file gốc của bạn)
-    
-    /* @GetMapping("/stats") // Giả sử một endpoint khác
+    /**
+     * API mới: Thêm bình luận vào một CheckInEvent
+     */
+    @PostMapping("/check-in/{checkInEventId}/comments")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> getStats(Authentication authentication) {
-        return ResponseEntity.ok(progressService.getUserStats(authentication.getName()));
+    public ResponseEntity<CommentResponse> addCommentToCheckIn(
+            @PathVariable String shareableLink, // Giữ shareableLink để khớp URL
+            @PathVariable Long checkInEventId,
+            @Valid @RequestBody PostCommentRequest request, // Tái sử dụng DTO từ package community
+            Authentication authentication) {
+        
+        String userEmail = authentication.getName();
+        CommentResponse newComment = progressService.addCommentToCheckIn(checkInEventId, request, userEmail);
+        return ResponseEntity.status(HttpStatus.CREATED).body(newComment);
     }
-    
-    @GetMapping("/chart") // Giả sử một endpoint khác
+
+    /**
+     * API mới: Cập nhật một bình luận
+     */
+    @PutMapping("/check-in/{checkInEventId}/comments/{commentId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> getChart(Authentication authentication) {
-        return ResponseEntity.ok(progressService.getProgressChartData(authentication.getName()));
+    public ResponseEntity<CommentResponse> updateCheckInComment(
+            @PathVariable String shareableLink,
+            @PathVariable Long checkInEventId,
+            @PathVariable Long commentId,
+            @Valid @RequestBody UpdateCommentRequest request, // Tái sử dụng DTO từ package community
+            Authentication authentication) {
+                
+        String userEmail = authentication.getName();
+        CommentResponse updatedComment = progressService.updateCheckInComment(commentId, request, userEmail);
+        return ResponseEntity.ok(updatedComment);
     }
-    */
+
+    /**
+     * API mới: Xóa một bình luận
+     */
+    @DeleteMapping("/check-in/{checkInEventId}/comments/{commentId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> deleteCheckInComment(
+            @PathVariable String shareableLink,
+            @PathVariable Long checkInEventId,
+            @PathVariable Long commentId,
+            Authentication authentication) {
+                
+        String userEmail = authentication.getName();
+        progressService.deleteCheckInComment(commentId, userEmail);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * API mới: Thêm/xóa (toggle) reaction
+     */
+    @PostMapping("/check-in/{checkInEventId}/reactions")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> toggleReactionOnCheckIn(
+            @PathVariable String shareableLink,
+            @PathVariable Long checkInEventId,
+            @Valid @RequestBody AddReactionRequest request, // Tái sử dụng DTO từ package community
+            Authentication authentication) {
+                
+        String userEmail = authentication.getName();
+        progressService.toggleReactionOnCheckIn(checkInEventId, request, userEmail);
+        return ResponseEntity.ok().build(); // Trả về 200 OK (hoặc 201/204 tùy logic)
+    }
+
+    // --- CÁC ENDPOINT STATS/CHART CŨ (giữ nguyên) ---
 }

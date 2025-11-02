@@ -5,17 +5,17 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+// THÊM IMPORT NÀY
+import com.example.demo.community.entity.ReactionType; 
 
 @Repository
 public interface ProgressReactionRepository extends JpaRepository<ProgressReaction, Long> {
     
-    // === THAY ĐỔI PHƯƠNG THỨC TRUY VẤN ===
-    //
-    // TÊN CŨ: 
-    // Optional<ProgressReaction> findByDailyProgressIdAndUserId(Long dailyProgressId, Integer userId);
-    //
-    // TÊN MỚI (và tham số mới):
+    // Phương thức cũ của bạn (vẫn giữ)
     Optional<ProgressReaction> findByCheckInEventIdAndUserId(Long checkInEventId, Integer userId);
-    //
-    // === KẾT THÚC THAY ĐỔI ===
+    
+    // === THÊM PHƯƠNG THỨC MỚI (BẮT BUỘC) ===
+    // SỬA LỖI 3: Thêm phương thức này để logic toggle-reaction hoạt động
+    Optional<ProgressReaction> findByCheckInEventIdAndUserIdAndType(Long checkInEventId, Integer userId, ReactionType type);
+    // === KẾT THÚC THÊM MỚI ===
 }
