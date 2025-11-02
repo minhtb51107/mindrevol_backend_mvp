@@ -54,28 +54,50 @@ public class ProgressController {
         return ResponseEntity.ok(progressService.getDailyTimeline(shareableLink, userEmail, date));
     }
 
-    // --- (MỚI) ENDPOINT SỬA CHECK-IN ---
+ // --- (MỚI) ENDPOINT SỬA CHECK-IN ---
     @PutMapping("/check-in/{checkInEventId}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<TimelineResponse.CheckInEventResponse> updateCheckIn(
-            @PathVariable String shareableLink, // (Không dùng, nhưng có trong path)
+            @PathVariable String shareableLink, 
             @PathVariable Long checkInEventId,
             @Valid @RequestBody UpdateCheckInRequest request,
-            @AuthenticationPrincipal User currentUser) { // (Dùng User object)
+            // --- (CŨ) ---
+            // @AuthenticationPrincipal User currentUser) { 
+            // 
+            // TimelineResponse.CheckInEventResponse updatedEvent = progressService.updateCheckIn(checkInEventId, request, currentUser.getEmail());
+            // return ResponseEntity.ok(updatedEvent);
+            // }
+            
+            // --- (MỚI) ---
+            Authentication authentication) { // Thay @AuthenticationPrincipal bằng Authentication
         
-        TimelineResponse.CheckInEventResponse updatedEvent = progressService.updateCheckIn(checkInEventId, request, currentUser.getEmail());
+        // Lấy email giống như các hàm khác
+        String userEmail = authentication.getName(); 
+        
+        TimelineResponse.CheckInEventResponse updatedEvent = progressService.updateCheckIn(checkInEventId, request, userEmail);
         return ResponseEntity.ok(updatedEvent);
     }
 
-    // --- (MỚI) ENDPOINT XÓA CHECK-IN ---
+ // --- (MỚI) ENDPOINT XÓA CHECK-IN ---
     @DeleteMapping("/check-in/{checkInEventId}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> deleteCheckIn(
-            @PathVariable String shareableLink, // (Không dùng, nhưng có trong path)
+            @PathVariable String shareableLink, 
             @PathVariable Long checkInEventId,
-            @AuthenticationPrincipal User currentUser) { // (Dùng User object)
+            // --- (CŨ) ---
+            // @AuthenticationPrincipal User currentUser) { 
+            // 
+            // progressService.deleteCheckIn(checkInEventId, currentUser.getEmail());
+            // return ResponseEntity.noContent().build(); 
+            // }
+            
+            // --- (MỚI) ---
+            Authentication authentication) { // Thay @AuthenticationPrincipal bằng Authentication
         
-        progressService.deleteCheckIn(checkInEventId, currentUser.getEmail());
+        // Lấy email giống như các hàm khác
+        String userEmail = authentication.getName();
+        
+        progressService.deleteCheckIn(checkInEventId, userEmail);
         return ResponseEntity.noContent().build(); // 204 No Content
     }
 
