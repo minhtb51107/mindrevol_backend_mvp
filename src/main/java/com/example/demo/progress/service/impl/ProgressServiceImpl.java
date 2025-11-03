@@ -356,30 +356,41 @@ public class ProgressServiceImpl implements ProgressService {
         User user = findUserByEmail(userEmail);
         CheckInEvent event = checkInEventRepository.findById(checkInEventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy CheckInEvent: " + checkInEventId));
-        
-        // SỬA LỖI 2: Dùng 'getReactionType()' thay vì 'getType()'
-        ReactionType type = request.getReactionType(); //
 
-        // SỬA LỖI 3: Dùng phương thức đã có (findByCheckInEventIdAndUserIdAndType)
-        Optional<ProgressReaction> existingReaction = progressReactionRepository
-                .findByCheckInEventIdAndUserIdAndType(checkInEventId, user.getId(), type);
+        ReactionType newType = request.getReactionType();
 
-        if (existingReaction.isPresent()) {
-            // Đã reaction -> Xóa (toggle off)
-            progressReactionRepository.delete(existingReaction.get());
-            log.info("User {} đã xóa reaction {} khỏi CheckInEvent {}", userEmail, type, checkInEventId);
+        // SỬA LỖI: Tìm BẤT KỲ reaction nào của user này, KHÔNG CẦN BIẾT TYPE
+        Optional<ProgressReaction> existingReactionOpt = progressReactionRepository
+                .findByCheckInEventIdAndUserId(checkInEventId, user.getId()); // Dùng phương thức này
+
+        if (existingReactionOpt.isPresent()) {
+            // User này đã reaction trước đó
+            ProgressReaction existingReaction = existingReactionOpt.get();
+
+            if (existingReaction.getType().equals(newType)) {
+                // 1. CÙNG LOẠI: User bấm lại reaction cũ -> Xóa (toggle off)
+                progressReactionRepository.delete(existingReaction);
+                log.info("User {} đã XÓA reaction {} khỏi CheckInEvent {}", userEmail, newType, checkInEventId);
+            
+            } else {
+                // 2. KHÁC LOẠI: User đổi reaction -> Cập nhật type
+                existingReaction.setType(newType);
+                progressReactionRepository.save(existingReaction); // Hàm save này sẽ là UPDATE
+                log.info("User {} đã ĐỔI reaction thành {} trên CheckInEvent {}", userEmail, newType, checkInEventId);
+            }
+
         } else {
-            // Chưa reaction -> Thêm (toggle on)
+            // 3. CHƯA CÓ: User reaction lần đầu -> Thêm mới (Insert)
             ProgressReaction newReaction = ProgressReaction.builder()
                     .checkInEvent(event)
-                    .user(user) // Giả định trường này tên là 'user' (dựa theo repo)
-                    .type(type)
+                    .user(user) 
+                    .type(newType)
                     .build();
             progressReactionRepository.save(newReaction);
-            log.info("User {} đã thêm reaction {} vào CheckInEvent {}", userEmail, type, checkInEventId);
+            log.info("User {} đã THÊM reaction {} vào CheckInEvent {}", userEmail, newType, checkInEventId);
         }
         
-        // Gửi WebSocket
+        // Gửi WebSocket (Giữ nguyên)
         String topic = "/topic/plan/" + event.getPlanMember().getPlan().getShareableLink() + "/progress";
         messagingTemplate.convertAndSend(topic, 
              Map.of("type", "UPDATE_CHECKIN_REACTION", "checkInEventId", checkInEventId)
