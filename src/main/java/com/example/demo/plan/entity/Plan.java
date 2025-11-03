@@ -3,6 +3,8 @@ package com.example.demo.plan.entity;
 import com.example.demo.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+// THÊM IMPORT NÀY
+import org.hibernate.annotations.Where;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -17,6 +19,7 @@ import java.util.UUID;
 @Builder
 @Entity
 @Table(name = "plans")
+@Where(clause = "status <> 'ARCHIVED'") // <-- THÊM DÒNG NÀY
 public class Plan {
 
     @Id

@@ -4,12 +4,14 @@ import com.example.demo.plan.dto.request.CreatePlanRequest;
 import com.example.demo.plan.dto.request.ManageTaskRequest;
 import com.example.demo.plan.dto.request.ReorderTasksRequest;
 import com.example.demo.plan.dto.request.TransferOwnershipRequest;
+// THÊM IMPORT NÀY
+import com.example.demo.plan.dto.request.UpdatePlanDetailsRequest;
 import com.example.demo.plan.dto.request.UpdatePlanRequest;
 import com.example.demo.plan.dto.response.PlanDetailResponse;
 import com.example.demo.plan.dto.response.PlanSummaryResponse;
 import com.example.demo.plan.dto.response.TaskResponse;
 
-import java.time.LocalDate; // --- THÊM IMPORT ---
+import java.time.LocalDate; 
 import java.util.List;
 
 public interface PlanService {
@@ -22,9 +24,13 @@ public interface PlanService {
 
     PlanDetailResponse updatePlan(String shareableLink, UpdatePlanRequest request, String userEmail);
 
+    // THÊM PHƯƠNG THỨC MỚI NÀY
+    PlanDetailResponse updatePlanDetails(String shareableLink, UpdatePlanDetailsRequest request, String userEmail);
+
     void leavePlan(String shareableLink, String userEmail);
 
-    void deletePlan(String shareableLink, String userEmail);
+    // XÓA PHƯƠNG THỨC NÀY
+    // void deletePlan(String shareableLink, String userEmail);
 
     List<PlanSummaryResponse> getMyPlans(String userEmail, String searchTerm);
 

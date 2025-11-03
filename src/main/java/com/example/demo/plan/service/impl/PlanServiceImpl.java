@@ -6,6 +6,8 @@ import com.example.demo.plan.dto.request.CreatePlanRequest;
 import com.example.demo.plan.dto.request.ManageTaskRequest;
 import com.example.demo.plan.dto.request.ReorderTasksRequest;
 import com.example.demo.plan.dto.request.TransferOwnershipRequest;
+// THÊM IMPORT NÀY
+import com.example.demo.plan.dto.request.UpdatePlanDetailsRequest;
 import com.example.demo.plan.dto.request.UpdatePlanRequest;
 import com.example.demo.plan.dto.response.PlanDetailResponse;
 import com.example.demo.plan.dto.response.PlanPublicResponse;
@@ -64,6 +66,13 @@ public class PlanServiceImpl implements PlanService {
         if (request.getStartDate().isBefore(LocalDate.now())) {
             throw new BadRequestException("Ngày bắt đầu không thể là một ngày trong quá khứ.");
         }
+        
+        // TÍNH TOÁN TRẠNG THÁI BAN ĐẦU
+        PlanStatus initialStatus = request.getStartDate().isAfter(LocalDate.now()) ? PlanStatus.ACTIVE : PlanStatus.ACTIVE;
+        // SỬA: Enum của bạn không có UPCOMING, nên ta dùng ACTIVE cho cả hai
+        // Nếu bạn thêm UPCOMING vào enum PlanStatus, hãy dùng dòng này:
+        // PlanStatus initialStatus = request.getStartDate().isAfter(LocalDate.now()) ? PlanStatus.UPCOMING : PlanStatus.ACTIVE;
+
 
         Plan newPlan = Plan.builder()
                 .title(request.getTitle())
@@ -73,8 +82,8 @@ public class PlanServiceImpl implements PlanService {
                 .startDate(request.getStartDate())
                 .creator(creator)
                 .members(new ArrayList<>())
-                .dailyTasks(new ArrayList<>()) // Mặc dù không dùng list này nhiều nữa, vẫn khởi tạo
-                .status(PlanStatus.ACTIVE) // Trạng thái mặc định
+                .dailyTasks(new ArrayList<>()) 
+                .status(initialStatus) // SỬA: Dùng trạng thái đã tính toán
                 .build();
 
         // Thêm các task ban đầu (nếu có) cho ngày bắt đầu
@@ -90,7 +99,7 @@ public class PlanServiceImpl implements PlanService {
                                 .taskDate(newPlan.getStartDate()) // Gán task cho ngày bắt đầu
                                 .build();
                     })
-                    .forEach(newPlan::addTask); // Vẫn dùng helper của Plan để duy trì mqh 2 chiều (dù list dailyTasks ít dùng)
+                    .forEach(newPlan::addTask); 
         }
 
         // Thêm người tạo làm chủ sở hữu
@@ -110,12 +119,18 @@ public class PlanServiceImpl implements PlanService {
 
     @Override
     public PlanDetailResponse joinPlan(String shareableLink, String userEmail) {
-        Plan plan = findPlanByShareableLink(shareableLink); // Fetch plan và members
+        // SỬA: Dùng findPlanByShareableLink (an toàn, user không thể join plan đã ARCHIVED)
+        Plan plan = findPlanByShareableLink(shareableLink); 
         User user = findUserByEmail(userEmail);
 
         // Kiểm tra xem user đã là thành viên chưa
         if (isUserMemberOfPlan(plan, user.getId())) {
             throw new BadRequestException("Bạn đã tham gia kế hoạch này rồi.");
+        }
+        
+        // SỬA: Kiểm tra plan có đang ACTIVE không (nếu bạn có status UPCOMING/COMPLETED)
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+             throw new BadRequestException("Kế hoạch này không hoạt động. Không thể tham gia.");
         }
 
         // Tạo thành viên mới
@@ -153,7 +168,7 @@ public class PlanServiceImpl implements PlanService {
     @Override
     @Transactional(readOnly = true)
     public Object getPlanDetails(String shareableLink, String userEmail) {
-        // Fetch plan và members (không cần fetch task ở đây nữa)
+        // SỬA: Dùng findPlanByShareableLink (an toàn, user thường không thể xem plan đã ARCHIVED)
         Plan plan = findPlanByShareableLink(shareableLink);
         User user = findUserByEmail(userEmail);
 
@@ -169,17 +184,20 @@ public class PlanServiceImpl implements PlanService {
 
     @Override
     public PlanDetailResponse updatePlan(String shareableLink, UpdatePlanRequest request, String userEmail) {
-        // Fetch plan và members (không cần fetch task)
-        Plan plan = findPlanByShareableLink(shareableLink);
+        // SỬA: Dùng hàm helper mới để có thể tìm thấy plan bất kể trạng thái
+        Plan plan = findPlanRegardlessOfStatus(shareableLink);
         User user = findUserByEmail(userEmail);
         ensureUserIsOwner(plan, user.getId()); // Đảm bảo là chủ sở hữu
+        
+        // THÊM: Cấm sửa plan đã lưu trữ
+        ensurePlanIsNotArchived(plan);
 
         // Kiểm tra xem thông tin cơ bản có thay đổi không
         boolean infoChanged = !Objects.equals(plan.getTitle(), request.getTitle()) ||
                               !Objects.equals(plan.getDescription(), request.getDescription()) ||
                               plan.getDurationInDays() != request.getDurationInDays() ||
                               !Objects.equals(plan.getDailyGoal(), request.getDailyGoal());
-        PlanStatus statusBeforeUpdate = plan.getStatus(); // Lưu trạng thái cũ để kiểm tra hoàn thành
+        PlanStatus statusBeforeUpdate = plan.getStatus(); 
 
         // Cập nhật thông tin cơ bản
         plan.setTitle(request.getTitle());
@@ -193,7 +211,7 @@ public class PlanServiceImpl implements PlanService {
         List<Task> oldTasksOnStartDate = taskRepository.findAllByPlanIdAndTaskDate(plan.getId().longValue(), plan.getStartDate());
         if (!oldTasksOnStartDate.isEmpty()) {
             taskRepository.deleteAll(oldTasksOnStartDate); // Xóa khỏi DB
-            plan.getDailyTasks().removeAll(oldTasksOnStartDate); // Xóa khỏi collection của Plan entity (dù ít dùng)
+            plan.getDailyTasks().removeAll(oldTasksOnStartDate); 
             log.info("Removed {} old tasks from start date {} during plan update.", oldTasksOnStartDate.size(), plan.getStartDate());
         }
 
@@ -210,7 +228,7 @@ public class PlanServiceImpl implements PlanService {
                              .taskDate(plan.getStartDate()) // Luôn gán cho ngày bắt đầu
                              .build();
                  })
-                 .forEach(plan::addTask); // Thêm vào collection và thiết lập mqh 2 chiều
+                 .forEach(plan::addTask); 
               log.info("Added {} new tasks to start date {} during plan update.", request.getDailyTasks().size(), plan.getStartDate());
         }
 
@@ -233,29 +251,62 @@ public class PlanServiceImpl implements PlanService {
              log.info("Plan {} info updated. Sent WebSocket update to {}", shareableLink, destination);
         }
 
-        // Kiểm tra xem plan có vừa mới hoàn thành không (dựa trên ngày kết thúc)
+        // Kiểm tra xem plan có vừa mới hoàn thành không
         LocalDate endDate = updatedPlan.getStartDate().plusDays(updatedPlan.getDurationInDays() - 1);
         boolean justCompleted = statusBeforeUpdate == PlanStatus.ACTIVE &&
-                                LocalDate.now().isAfter(endDate); // Điều kiện đơn giản: active và đã qua ngày kết thúc
-        // Lưu ý: Logic hoàn thành có thể phức tạp hơn (VD: chủ plan bấm nút hoàn thành)
-        if (justCompleted) {
-            log.info("Plan {} is considered completed based on end date.", shareableLink);
+                                LocalDate.now().isAfter(endDate); 
+        
+        if (justCompleted && statusBeforeUpdate != PlanStatus.COMPLETED) {
+            log.info("Plan {} is marked as COMPLETED based on end date.", shareableLink);
+            updatedPlan.setStatus(PlanStatus.COMPLETED); // SỬA: Cập nhật status
+            planRepository.save(updatedPlan); // Lưu lại
+            
             Map<String, Object> details = Map.of("memberCount", updatedPlan.getMembers().size());
-            // Gửi Feed Event PLAN_COMPLETE (actor là null vì đây là sự kiện hệ thống)
             feedService.createAndPublishFeedEvent(FeedEventType.PLAN_COMPLETE, null, updatedPlan, details);
-            // Có thể cập nhật trạng thái plan thành COMPLETED ở đây nếu muốn
-            // updatedPlan.setStatus(PlanStatus.COMPLETED);
-            // planRepository.save(updatedPlan);
         }
 
-        // Trả về chi tiết Plan đã cập nhật
         return planMapper.toPlanDetailResponse(updatedPlan);
     }
+    
+    // --- THÊM PHƯƠNG THỨC MỚI ---
+    @Override
+    @Transactional
+    public PlanDetailResponse updatePlanDetails(String shareableLink, UpdatePlanDetailsRequest request, String userEmail) {
+        Plan plan = findPlanRegardlessOfStatus(shareableLink); // Owner có thể sửa plan (trừ plan archived)
+        User user = findUserByEmail(userEmail);
+        ensureUserIsOwner(plan, user.getId());
+
+        // Cấm sửa plan đã lưu trữ
+        ensurePlanIsNotArchived(plan);
+
+        plan.setTitle(request.getTitle());
+        plan.setDescription(request.getDescription());
+        plan.setDailyGoal(request.getDailyGoal());
+
+        Plan savedPlan = planRepository.save(plan);
+        PlanDetailResponse response = planMapper.toPlanDetailResponse(savedPlan);
+
+        // Gửi WebSocket thông báo
+        String destination = "/topic/plan/" + shareableLink + "/details";
+         Map<String, Object> payload = Map.of(
+            "type", "PLAN_INFO_UPDATED",
+            "title", response.getTitle(),
+            "description", response.getDescription(),
+            "dailyGoal", response.getDailyGoal()
+            // Không gửi các trường không thay đổi
+        );
+        messagingTemplate.convertAndSend(destination, payload);
+        log.info("User {} updated plan details for {}. Sent WebSocket update.", userEmail, shareableLink);
+
+        return response;
+    }
+    // --- KẾT THÚC THÊM MỚI ---
 
 
     @Override
     public void leavePlan(String shareableLink, String userEmail) {
-        Plan plan = findPlanByShareableLink(shareableLink);
+        // SỬA: Dùng helper mới, cho phép user rời cả plan đã archived
+        Plan plan = findPlanRegardlessOfStatus(shareableLink);
         User user = findUserByEmail(userEmail);
 
         // Tìm thành viên tương ứng
@@ -273,33 +324,44 @@ public class PlanServiceImpl implements PlanService {
         plan.getMembers().remove(member); // Xóa khỏi collection của Plan
         planMemberRepository.delete(member); // Xóa khỏi DB
          log.info("User {} left plan {}", userEmail, shareableLink);
-         // Không cần Feed event
-         // Không cần WebSocket vì user rời đi sẽ không nhận được nữa
+         
+        // Gửi WebSocket cho các thành viên còn lại
+        String destination = "/topic/plan/" + shareableLink + "/details";
+        Map<String, Object> payload = Map.of(
+            "type", "MEMBER_LEFT",
+            "userId", user.getId()
+        );
+        messagingTemplate.convertAndSend(destination, payload);
     }
 
+    // --- XÓA PHƯƠNG THỨC NÀY ---
+    /*
     @Override
     public void deletePlan(String shareableLink, String userEmail) {
-         Plan plan = findPlanByShareableLink(shareableLink);
+         Plan plan = findPlanByShareableLink(shareableLink); // SẼ BỊ LỖI NẾU DÙNG @Where
         User user = findUserByEmail(userEmail);
         ensureUserIsOwner(plan, user.getId()); // Đảm bảo là chủ sở hữu
         planRepository.delete(plan); // Xóa plan (cascade xóa members, tasks, etc.)
          log.info("User {} deleted plan {}", userEmail, shareableLink);
-          // Không cần Feed event hay WebSocket
     }
+    */
 
     @Override
     @Transactional(readOnly = true)
     public List<PlanSummaryResponse> getMyPlans(String userEmail, String searchTerm) {
          User user = findUserByEmail(userEmail);
          // Lấy tất cả PlanMember của user, fetch kèm Plan
+         // Query này KHÔNG bị ảnh hưởng bởi @Where vì nó truy vấn PlanMember
         List<PlanMember> planMembers = planMemberRepository.findByUserIdWithPlan(user.getId());
 
-        Stream<PlanMember> filteredStream = planMembers.stream();
+        Stream<PlanMember> filteredStream = planMembers.stream()
+                // THÊM BỘ LỌC: Lọc bỏ các plan đã ARCHIVED ở tầng service
+                .filter(pm -> pm.getPlan() != null && pm.getPlan().getStatus() != PlanStatus.ARCHIVED);
+
         // Lọc theo searchTerm nếu có
         if (searchTerm != null && !searchTerm.isBlank()) {
             String lowerCaseSearchTerm = searchTerm.toLowerCase().trim();
-            filteredStream = filteredStream.filter(pm -> pm.getPlan() != null &&
-                                                        pm.getPlan().getTitle() != null &&
+            filteredStream = filteredStream.filter(pm -> pm.getPlan().getTitle() != null &&
                                                         pm.getPlan().getTitle().toLowerCase().contains(lowerCaseSearchTerm));
         }
 
@@ -311,15 +373,17 @@ public class PlanServiceImpl implements PlanService {
                 .collect(Collectors.toList());
     }
 
-    // --- Task Management Methods (ĐÃ CẬP NHẬT THEO LOGIC MỚI) ---
+    // --- Task Management Methods (CẬP NHẬT KIỂM TRA ARCHIVED) ---
 
     @Override
     public TaskResponse addTaskToPlan(String shareableLink, ManageTaskRequest request, String userEmail) {
-        Plan plan = findPlanByShareableLink(shareableLink); // Không cần fetch task
+        Plan plan = findPlanRegardlessOfStatus(shareableLink); // SỬA
         User user = findUserByEmail(userEmail);
-        ensureUserIsOwner(plan, user.getId()); // Đảm bảo là chủ sở hữu
+        ensureUserIsOwner(plan, user.getId()); 
+        
+        ensurePlanIsNotArchived(plan); // THÊM
 
-        // Validate taskDate là bắt buộc và hợp lệ
+        // (Logic còn lại giữ nguyên)
         if (request.getTaskDate() == null) {
             throw new BadRequestException("Ngày của công việc (taskDate) là bắt buộc.");
         }
@@ -328,72 +392,53 @@ public class PlanServiceImpl implements PlanService {
              throw new BadRequestException("Ngày của công việc phải nằm trong thời gian của kế hoạch ("
                 + plan.getStartDate() + " đến " + planEndDate + ").");
         }
-
-        // Tìm thứ tự (order) lớn nhất hiện tại của ngày đó để gán order mới
         int nextOrder = taskRepository.findMaxOrderByPlanIdAndTaskDate(plan.getId().longValue(), request.getTaskDate())
-                           .map(maxOrder -> maxOrder + 1) // Nếu có thì +1
-                           .orElse(0); // Nếu chưa có task nào thì bắt đầu từ 0
-
-        // Tạo Task entity mới
+                           .map(maxOrder -> maxOrder + 1) 
+                           .orElse(0); 
         Task newTask = Task.builder()
                 .description(request.getDescription())
                 .deadlineTime(request.getDeadlineTime())
                 .order(nextOrder)
-                .plan(plan) // Thiết lập mqh với Plan
-                .taskDate(request.getTaskDate()) // Gán ngày từ request
+                .plan(plan) 
+                .taskDate(request.getTaskDate()) 
                 .build();
-
-        // Lưu task mới vào DB
         Task savedTask = taskRepository.save(newTask);
-        // Lưu ý: Không cần add vào plan.getDailyTasks() nữa
-
-        // Map sang DTO Response
         TaskResponse taskResponse = taskMapper.toTaskResponse(savedTask);
-
-        // Gửi WebSocket thông báo có task mới
         String destination = "/topic/plan/" + shareableLink + "/tasks";
         Map<String, Object> payload = Map.of(
             "type", "NEW_TASK",
-            "taskDate", savedTask.getTaskDate().toString(), // Thêm ngày để Frontend biết cập nhật ngày nào
-            "task", taskResponse // Gửi thông tin task mới
+            "taskDate", savedTask.getTaskDate().toString(), 
+            "task", taskResponse 
         );
         messagingTemplate.convertAndSend(destination, payload);
         log.info("Added task {} (date: {}) to plan {}. Sent WebSocket update to {}", savedTask.getId(), savedTask.getTaskDate(), shareableLink, destination);
-
         return taskResponse;
     }
 
     @Override
     public TaskResponse updateTaskInPlan(String shareableLink, Long taskId, ManageTaskRequest request, String userEmail) {
-        Plan plan = findPlanByShareableLink(shareableLink);
+        Plan plan = findPlanRegardlessOfStatus(shareableLink); // SỬA
         User user = findUserByEmail(userEmail);
         ensureUserIsOwner(plan, user.getId());
+        
+        ensurePlanIsNotArchived(plan); // THÊM
 
-        // Tìm task cần cập nhật
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy công việc với ID: " + taskId));
-
-        // Kiểm tra task có thuộc plan này không
         if (!task.getPlan().getId().equals(plan.getId())) {
              throw new AccessDeniedException("Công việc ID " + taskId + " không thuộc kế hoạch " + shareableLink);
         }
 
-        LocalDate originalDate = task.getTaskDate(); // Lưu lại ngày cũ
+        // (Logic còn lại giữ nguyên)
+        LocalDate originalDate = task.getTaskDate(); 
         boolean dateChanged = false;
-
-        // Cập nhật description và deadlineTime
         task.setDescription(request.getDescription());
         task.setDeadlineTime(request.getDeadlineTime());
-
-        // Xử lý nếu có taskDate mới (chuyển task sang ngày khác)
         if (request.getTaskDate() != null && !request.getTaskDate().equals(originalDate)) {
-            // Validate ngày mới
             LocalDate planEndDate = plan.getStartDate().plusDays(plan.getDurationInDays() - 1);
              if (request.getTaskDate().isBefore(plan.getStartDate()) || request.getTaskDate().isAfter(planEndDate)) {
                  throw new BadRequestException("Ngày chuyển đến ("+ request.getTaskDate() +") phải nằm trong thời gian của kế hoạch.");
              }
-
-            // Tìm order mới ở ngày mới
             int nextOrderInNewDate = taskRepository.findMaxOrderByPlanIdAndTaskDate(plan.getId().longValue(), request.getTaskDate())
                            .map(maxOrder -> maxOrder + 1)
                            .orElse(0);
@@ -402,98 +447,72 @@ public class PlanServiceImpl implements PlanService {
             dateChanged = true;
             log.info("Task {} moved from {} to {} with new order {}", taskId, originalDate, task.getTaskDate(), task.getOrder());
         }
-
-        // Lưu lại task đã cập nhật
         Task updatedTask = taskRepository.save(task);
-
-        // Map sang DTO Response
         TaskResponse taskResponse = taskMapper.toTaskResponse(updatedTask);
-
-        // Gửi WebSocket: Type là MOVE_TASK nếu ngày thay đổi, UPDATE_TASK nếu không
         String destination = "/topic/plan/" + shareableLink + "/tasks";
-        Map<String, Object> payload = new HashMap<>(); // Dùng HashMap để dễ thêm key
+        Map<String, Object> payload = new HashMap<>(); 
         payload.put("type", dateChanged ? "MOVE_TASK" : "UPDATE_TASK");
-        payload.put("taskDate", updatedTask.getTaskDate().toString()); // Ngày hiện tại của task
+        payload.put("taskDate", updatedTask.getTaskDate().toString()); 
         payload.put("task", taskResponse);
         if (dateChanged) {
-             payload.put("originalTaskDate", originalDate.toString()); // Gửi thêm ngày gốc nếu task bị move
+             payload.put("originalTaskDate", originalDate.toString()); 
         }
         messagingTemplate.convertAndSend(destination, payload);
         log.info("Updated task {} in plan {}. Sent WebSocket update ({}) to {}", taskId, shareableLink, payload.get("type"), destination);
-
-        // Nếu ngày thay đổi, cần cập nhật lại thứ tự của các task ở ngày cũ (sau khi task này bị dời đi)
          if (dateChanged) {
              reorderTasksAfterRemoval(plan.getId().longValue(), originalDate, task.getOrder());
-             // Gửi thêm WebSocket REORDER cho ngày cũ? (Có thể không cần nếu client fetch lại khi nhận MOVE_TASK)
-             // Hoặc client tự xử lý UI khi nhận MOVE_TASK
          }
-
         return taskResponse;
     }
 
     @Override
     public void deleteTaskFromPlan(String shareableLink, Long taskId, String userEmail) {
-        Plan plan = findPlanByShareableLink(shareableLink);
+        Plan plan = findPlanRegardlessOfStatus(shareableLink); // SỬA
         User user = findUserByEmail(userEmail);
         ensureUserIsOwner(plan, user.getId());
+        
+        ensurePlanIsNotArchived(plan); // THÊM
 
-        // Tìm task cần xóa
         Task taskToRemove = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy công việc với ID: " + taskId));
-
-        // Kiểm tra task có thuộc plan này không
         if (!taskToRemove.getPlan().getId().equals(plan.getId())) {
              throw new AccessDeniedException("Công việc ID " + taskId + " không thuộc kế hoạch " + shareableLink);
         }
 
-        LocalDate taskDate = taskToRemove.getTaskDate(); // Lấy ngày của task bị xóa
-        Integer removedOrder = taskToRemove.getOrder(); // Lấy thứ tự của task bị xóa
-
-        // Xóa task khỏi DB
+        // (Logic còn lại giữ nguyên)
+        LocalDate taskDate = taskToRemove.getTaskDate(); 
+        Integer removedOrder = taskToRemove.getOrder(); 
         taskRepository.delete(taskToRemove);
         log.info("Deleted task {} (date: {}, order: {}) from plan {}", taskId, taskDate, removedOrder, shareableLink);
-
-
-        // Gửi WebSocket thông báo xóa task
         String destination = "/topic/plan/" + shareableLink + "/tasks";
         Map<String, Object> payload = Map.of(
             "type", "DELETE_TASK",
-            "taskDate", taskDate != null ? taskDate.toString() : "null", // Gửi kèm ngày
+            "taskDate", taskDate != null ? taskDate.toString() : "null", 
             "taskId", taskId
         );
         messagingTemplate.convertAndSend(destination, payload);
         log.info("Sent WebSocket update ({}) to {} for deleted task {}", payload.get("type"), destination, taskId);
-
-        // Cập nhật lại thứ tự các task còn lại CÙNG NGÀY
         reorderTasksAfterRemoval(plan.getId().longValue(), taskDate, removedOrder);
-        // Có thể gửi thêm WebSocket REORDER cho ngày đó nếu cần,
-        // nhưng client nên fetch lại khi nhận DELETE_TASK.
     }
 
      @Override
      public List<TaskResponse> reorderTasksInPlan(String shareableLink, ReorderTasksRequest request, String ownerEmail) {
-         Plan plan = findPlanByShareableLink(shareableLink);
+         Plan plan = findPlanRegardlessOfStatus(shareableLink); // SỬA
          User owner = findUserByEmail(ownerEmail);
          ensureUserIsOwner(plan, owner.getId());
+         
+         ensurePlanIsNotArchived(plan); // THÊM
 
-         // Validate taskDate từ request
+         // (Logic còn lại giữ nguyên)
          LocalDate taskDate = request.getTaskDate();
          if (taskDate == null) {
             throw new BadRequestException("Ngày của công việc (taskDate) là bắt buộc để sắp xếp.");
          }
-         // Optional: Validate date nằm trong plan duration
-
          List<Long> orderedTaskIds = request.getOrderedTaskIds();
          if (orderedTaskIds == null || orderedTaskIds.isEmpty()) {
-              // Nếu danh sách rỗng, không có gì để sắp xếp
               return Collections.emptyList();
-              // Hoặc throw lỗi tùy logic: throw new BadRequestException("Danh sách ID công việc rỗng.");
          }
-
-         // Lấy danh sách task hiện tại CỦA NGÀY ĐÓ từ DB
          List<Task> currentTasks = taskRepository.findAllByPlanIdAndTaskDateOrderByOrderAsc(plan.getId().longValue(), taskDate);
-
-         // Kiểm tra tính hợp lệ của danh sách ID mới
          if (orderedTaskIds.size() != currentTasks.size()) {
              throw new BadRequestException("Số lượng công việc không khớp. Yêu cầu: " + orderedTaskIds.size() + ", Hiện có cho ngày " + taskDate + ": " + currentTasks.size());
          }
@@ -501,48 +520,38 @@ public class PlanServiceImpl implements PlanService {
          if (!currentTaskIdsSet.containsAll(orderedTaskIds)) {
              throw new BadRequestException("Danh sách ID công việc không hợp lệ hoặc chứa ID không thuộc ngày " + taskDate);
          }
-         if (new HashSet<>(orderedTaskIds).size() != orderedTaskIds.size()) { // Kiểm tra ID trùng lặp
+         if (new HashSet<>(orderedTaskIds).size() != orderedTaskIds.size()) { 
               throw new BadRequestException("Danh sách ID công việc chứa ID trùng lặp.");
          }
-
-         // Tạo map để truy cập nhanh Task entity bằng ID
          Map<Long, Task> taskMap = currentTasks.stream()
                                               .collect(Collectors.toMap(Task::getId, Function.identity()));
-
-         List<Task> updatedTasksInOrder = new ArrayList<>(); // List chứa task theo thứ tự mới
-         List<Task> tasksToSave = new ArrayList<>(); // Chỉ chứa task có order thay đổi cần lưu
+         List<Task> updatedTasksInOrder = new ArrayList<>(); 
+         List<Task> tasksToSave = new ArrayList<>(); 
          boolean orderChanged = false;
          for (int i = 0; i < orderedTaskIds.size(); i++) {
              Long taskId = orderedTaskIds.get(i);
              Task task = taskMap.get(taskId);
-             // Nếu order mới khác order cũ
              if (task.getOrder() == null || task.getOrder() != i) {
-                 task.setOrder(i); // Cập nhật order mới
+                 task.setOrder(i); 
                  tasksToSave.add(task);
                  orderChanged = true;
              }
-             updatedTasksInOrder.add(task); // Thêm vào list theo đúng thứ tự mới
+             updatedTasksInOrder.add(task); 
          }
-
-         // Chỉ lưu vào DB nếu có thay đổi thứ tự
          if (orderChanged) {
              taskRepository.saveAll(tasksToSave);
              log.info("Reordered {} tasks for plan {} on date {}", tasksToSave.size(), shareableLink, taskDate);
          } else {
               log.info("No order changes detected for tasks in plan {} on date {}", shareableLink, taskDate);
          }
-
-         // Gửi WebSocket thông báo reorder (luôn gửi để đảm bảo client đồng bộ, ngay cả khi DB không đổi)
          String destination = "/topic/plan/" + shareableLink + "/tasks";
          Map<String, Object> payload = Map.of(
              "type", "REORDER_TASKS",
-             "taskDate", taskDate.toString(), // Gửi kèm ngày
-             "orderedTaskIds", orderedTaskIds // Gửi danh sách ID theo thứ tự mới
+             "taskDate", taskDate.toString(), 
+             "orderedTaskIds", orderedTaskIds 
          );
          messagingTemplate.convertAndSend(destination, payload);
          log.debug("Sent WebSocket update ({}) to {} for task reorder on {}", payload.get("type"), destination, taskDate);
-
-         // Trả về danh sách TaskResponse theo thứ tự mới
          return updatedTasksInOrder.stream()
                     .map(taskMapper::toTaskResponse)
                     .collect(Collectors.toList());
@@ -552,60 +561,49 @@ public class PlanServiceImpl implements PlanService {
     @Override
     @Transactional(readOnly = true)
     public List<TaskResponse> getTasksByDate(String shareableLink, LocalDate date, String userEmail) {
+        // SỬA: Dùng findPlanByShareableLink (an toàn, member không thể xem task của plan đã ARCHIVED)
         Plan plan = findPlanByShareableLink(shareableLink);
         User user = findUserByEmail(userEmail);
 
-        // Kiểm tra quyền truy cập (là thành viên)
         if (!isUserMemberOfPlan(plan, user.getId())) {
              throw new AccessDeniedException("Bạn không phải là thành viên của kế hoạch này.");
         }
-
-        // Validate ngày nằm trong khoảng thời gian của plan (optional but recommended)
+        
+        // (Logic còn lại giữ nguyên)
         LocalDate planEndDate = plan.getStartDate().plusDays(plan.getDurationInDays() - 1);
         if (date.isBefore(plan.getStartDate()) || date.isAfter(planEndDate)) {
              log.warn("User {} requested tasks for date {} outside of plan {} duration ({} to {})",
                 userEmail, date, shareableLink, plan.getStartDate(), planEndDate);
-             // Trả về list rỗng nếu ngày không hợp lệ thay vì lỗi
              return Collections.emptyList();
         }
-
-        // Lấy task từ repository (đã có sắp xếp theo order)
         List<Task> tasks = taskRepository.findAllByPlanIdAndTaskDateOrderByOrderAsc(plan.getId().longValue(), date);
-
-        // Map sang DTO Response
         return tasks.stream()
                 .map(taskMapper::toTaskResponse)
                 .collect(Collectors.toList());
     }
 
 
-    // --- Member & Status Management Methods ---
+    // --- Member & Status Management Methods (SỬA DÙNG HELPER MỚI) ---
     @Override
     public void removeMemberFromPlan(String shareableLink, Integer memberUserId, String ownerEmail) {
-        Plan plan = findPlanByShareableLink(shareableLink);
+        Plan plan = findPlanRegardlessOfStatus(shareableLink); // SỬA
         User owner = findUserByEmail(ownerEmail);
         ensureUserIsOwner(plan, owner.getId());
 
-        // Tìm thành viên cần xóa
         PlanMember memberToRemove = plan.getMembers().stream()
                 .filter(m -> m.getUser() != null && m.getUser().getId().equals(memberUserId))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thành viên với ID: " + memberUserId + " trong kế hoạch này."));
-
-        // Không thể xóa chủ sở hữu
         if (memberToRemove.getRole() == MemberRole.OWNER) {
             throw new BadRequestException("Không thể xóa chủ sở hữu kế hoạch.");
         }
+        plan.getMembers().remove(memberToRemove); 
+        planMemberRepository.delete(memberToRemove); 
 
-        // Xóa thành viên
-        plan.getMembers().remove(memberToRemove); // Xóa khỏi collection
-        planMemberRepository.delete(memberToRemove); // Xóa khỏi DB
-
-        // Gửi WebSocket thông báo thành viên bị xóa
         String destination = "/topic/plan/" + shareableLink + "/details";
         Map<String, Object> payload = Map.of(
             "type", "MEMBER_REMOVED",
-            "userId", memberUserId // Gửi ID của user bị xóa
+            "userId", memberUserId 
         );
         messagingTemplate.convertAndSend(destination, payload);
         log.info("Removed user {} from plan {}. Sent WebSocket update to {}", memberUserId, shareableLink, destination);
@@ -613,36 +611,27 @@ public class PlanServiceImpl implements PlanService {
 
     @Override
     public void transferOwnership(String shareableLink, TransferOwnershipRequest request, String currentOwnerEmail) {
-        Plan plan = findPlanByShareableLink(shareableLink);
+        Plan plan = findPlanRegardlessOfStatus(shareableLink); // SỬA
         User currentOwnerUser = findUserByEmail(currentOwnerEmail);
         Integer newOwnerUserId = request.getNewOwnerUserId();
 
-        // Tìm PlanMember của chủ sở hữu hiện tại
         PlanMember currentOwnerMember = plan.getMembers().stream()
                 .filter(m -> m.getUser() != null && m.getUser().getId().equals(currentOwnerUser.getId()) && m.getRole() == MemberRole.OWNER)
                 .findFirst()
                 .orElseThrow(() -> new AccessDeniedException("Chỉ chủ sở hữu hiện tại ("+ currentOwnerEmail +") mới có quyền chuyển quyền sở hữu."));
-
-        // Tìm PlanMember của người sẽ nhận quyền
         PlanMember newOwnerMember = plan.getMembers().stream()
                 .filter(m -> m.getUser() != null && m.getUser().getId().equals(newOwnerUserId))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thành viên với ID: " + newOwnerUserId + " trong kế hoạch này để chuyển quyền."));
-
-        // Không thể chuyển cho chính mình
         if (newOwnerMember.getId().equals(currentOwnerMember.getId())) {
             throw new BadRequestException("Bạn không thể chuyển quyền sở hữu cho chính mình.");
         }
+        currentOwnerMember.setRole(MemberRole.MEMBER); 
+        newOwnerMember.setRole(MemberRole.OWNER);   
 
-        // Đổi vai trò
-        currentOwnerMember.setRole(MemberRole.MEMBER); // Chủ cũ thành thành viên
-        newOwnerMember.setRole(MemberRole.OWNER);   // Người mới thành chủ sở hữu
-
-        // Lưu cả hai thay đổi
         planMemberRepository.saveAll(Arrays.asList(currentOwnerMember, newOwnerMember));
         log.info("Ownership of plan {} transferred from user {} to user {}", shareableLink, currentOwnerUser.getId(), newOwnerUserId);
 
-        // Gửi WebSocket thông báo chuyển quyền
         String destination = "/topic/plan/" + shareableLink + "/details";
         Map<String, Object> payload = Map.of(
             "type", "OWNERSHIP_TRANSFERRED",
@@ -655,59 +644,57 @@ public class PlanServiceImpl implements PlanService {
 
     @Override
     public PlanDetailResponse archivePlan(String shareableLink, String ownerEmail) {
-        Plan plan = findPlanByShareableLink(shareableLink);
+        // SỬA: Dùng helper mới để có thể tìm thấy plan bất kể trạng thái
+        Plan plan = findPlanRegardlessOfStatus(shareableLink);
         User owner = findUserByEmail(ownerEmail);
         ensureUserIsOwner(plan, owner.getId());
 
-        // Kiểm tra nếu đã lưu trữ rồi
         if (plan.getStatus() == PlanStatus.ARCHIVED) {
             throw new BadRequestException("Kế hoạch này đã được lưu trữ.");
         }
-
-        // Đổi trạng thái và lưu
         plan.setStatus(PlanStatus.ARCHIVED);
         Plan updatedPlan = planRepository.save(plan);
-        PlanDetailResponse response = planMapper.toPlanDetailResponse(updatedPlan); // Map sang DTO
+        PlanDetailResponse response = planMapper.toPlanDetailResponse(updatedPlan); 
 
-        // Gửi WebSocket thông báo thay đổi trạng thái
         String destination = "/topic/plan/" + shareableLink + "/details";
         Map<String, Object> payload = Map.of(
             "type", "STATUS_CHANGED",
-            "status", PlanStatus.ARCHIVED.name(), // Trạng thái mới
-            "displayStatus", response.getDisplayStatus() // Trạng thái hiển thị (có thể khác)
+            "status", PlanStatus.ARCHIVED.name(), 
+            "displayStatus", response.getDisplayStatus() 
         );
         messagingTemplate.convertAndSend(destination, payload);
         log.info("Archived plan {}. Sent WebSocket update to {}", shareableLink, destination);
-
         return response;
     }
 
     @Override
     public PlanDetailResponse unarchivePlan(String shareableLink, String ownerEmail) {
-        Plan plan = findPlanByShareableLink(shareableLink);
+        // SỬA: Dùng helper mới để tìm plan đã bị "soft delete"
+        Plan plan = findPlanRegardlessOfStatus(shareableLink); 
         User owner = findUserByEmail(ownerEmail);
         ensureUserIsOwner(plan, owner.getId());
 
-        // Kiểm tra nếu không phải đang lưu trữ
         if (plan.getStatus() != PlanStatus.ARCHIVED) {
             throw new BadRequestException("Kế hoạch này không ở trạng thái lưu trữ.");
         }
-
-        // Đổi trạng thái về ACTIVE và lưu
-        plan.setStatus(PlanStatus.ACTIVE); // Chuyển về Active (hoặc trạng thái phù hợp khác)
+        
+        // SỬA: Tính toán trạng thái mới
+        // Nếu ngày kết thúc đã qua, set là COMPLETED, ngược lại là ACTIVE
+        LocalDate endDate = plan.getStartDate().plusDays(plan.getDurationInDays() - 1);
+        PlanStatus newStatus = LocalDate.now().isAfter(endDate) ? PlanStatus.COMPLETED : PlanStatus.ACTIVE;
+        
+        plan.setStatus(newStatus); 
         Plan updatedPlan = planRepository.save(plan);
          PlanDetailResponse response = planMapper.toPlanDetailResponse(updatedPlan);
 
-        // Gửi WebSocket thông báo thay đổi trạng thái
         String destination = "/topic/plan/" + shareableLink + "/details";
         Map<String, Object> payload = Map.of(
             "type", "STATUS_CHANGED",
-            "status", PlanStatus.ACTIVE.name(), // Trạng thái mới
+            "status", newStatus.name(), // SỬA: Gửi trạng thái mới
             "displayStatus", response.getDisplayStatus()
         );
         messagingTemplate.convertAndSend(destination, payload);
-         log.info("Unarchived plan {}. Sent WebSocket update to {}", shareableLink, destination);
-
+         log.info("Unarchived plan {}. New status: {}. Sent WebSocket update to {}", shareableLink, newStatus, destination);
         return response;
     }
 
@@ -716,7 +703,8 @@ public class PlanServiceImpl implements PlanService {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với email: " + email));
     }
-    // Helper này chỉ fetch Plan và Members
+    
+    // Helper này BỊ ẢNH HƯỞNG bởi @Where
     private Plan findPlanByShareableLink(String link) {
         return planRepository.findByShareableLink(link)
                 .map(plan -> {
@@ -725,6 +713,26 @@ public class PlanServiceImpl implements PlanService {
                 })
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy kế hoạch với link: " + link));
     }
+
+    // --- THÊM HELPER MỚI ---
+    // Helper này "VƯỢT RÀO" @Where, dùng cho các hàm quản trị
+    private Plan findPlanRegardlessOfStatus(String link) {
+         return planRepository.findRegardlessOfStatusByShareableLink(link)
+                .map(plan -> {
+                    plan.getMembers().size(); // Trigger fetch members
+                    return plan;
+                })
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy kế hoạch với link: " + link));
+    }
+    
+    // --- THÊM HELPER MỚI ---
+    // Helper kiểm tra plan có bị lưu trữ không
+    private void ensurePlanIsNotArchived(Plan plan) {
+        if (plan.getStatus() == PlanStatus.ARCHIVED) {
+            throw new BadRequestException("Không thể thực hiện hành động này. Kế hoạch đã được lưu trữ.");
+        }
+    }
+    // --- KẾT THÚC THÊM HELPER ---
 
     // Helper kiểm tra user có phải là thành viên không
     private boolean isUserMemberOfPlan(Plan plan, Integer userId) {
@@ -749,32 +757,25 @@ public class PlanServiceImpl implements PlanService {
     // Helper cập nhật lại thứ tự các task sau khi một task bị xóa hoặc chuyển đi
     private void reorderTasksAfterRemoval(Long planId, LocalDate taskDate, Integer removedOrder) {
          if (planId == null || taskDate == null || removedOrder == null || removedOrder < 0) {
-             // Không cần reorder nếu thiếu thông tin hoặc order không hợp lệ
              return;
          }
-
-        // Tìm tất cả các task còn lại trong ngày đó có order lớn hơn order bị xóa/chuyển
         List<Task> tasksToReorder = taskRepository.findAllByPlanIdAndTaskDate(planId, taskDate)
             .stream()
             .filter(t -> t.getOrder() != null && t.getOrder() > removedOrder)
             .peek(t -> t.setOrder(t.getOrder() - 1)) // Giảm order đi 1
             .collect(Collectors.toList());
-
-        // Nếu có task cần cập nhật order, lưu lại
         if (!tasksToReorder.isEmpty()) {
             taskRepository.saveAll(tasksToReorder);
             log.info("Reordered {} tasks on date {} after removal/move.", tasksToReorder.size(), taskDate);
         }
     }
 
-     // Helper map PlanMember sang DTO (dùng cho WebSocket)
+     // Helper map PlanMember sang DTO (dùng cho WebSocket, logs, etc.)
      private PlanDetailResponse.PlanMemberResponse toPlanMemberResponse(PlanMember member) {
-        // Sử dụng PlanMapper nếu có, hoặc map thủ công
         return planMapper.toPlanMemberResponse(member);
      }
      // Helper lấy tên đầy đủ của User (dùng cho WebSocket, logs, etc.)
      private String getUserFullName(User user) {
-        // Sử dụng TaskMapper helper nếu có, hoặc map thủ công
-        return taskMapper.getUserFullName(user); // Giả sử TaskMapper có helper này
+        return taskMapper.getUserFullName(user); 
      }
 }
