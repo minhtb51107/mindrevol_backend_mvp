@@ -4,14 +4,13 @@ import com.example.demo.plan.dto.request.CreatePlanRequest;
 import com.example.demo.plan.dto.request.ManageTaskRequest;
 import com.example.demo.plan.dto.request.ReorderTasksRequest;
 import com.example.demo.plan.dto.request.TransferOwnershipRequest;
-// THÊM IMPORT NÀY
 import com.example.demo.plan.dto.request.UpdatePlanDetailsRequest;
 import com.example.demo.plan.dto.request.UpdatePlanRequest;
 import com.example.demo.plan.dto.response.PlanDetailResponse;
 import com.example.demo.plan.dto.response.PlanSummaryResponse;
 import com.example.demo.plan.dto.response.TaskResponse;
 
-import java.time.LocalDate; 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface PlanService {
@@ -24,17 +23,14 @@ public interface PlanService {
 
     PlanDetailResponse updatePlan(String shareableLink, UpdatePlanRequest request, String userEmail);
 
-    // THÊM PHƯƠNG THỨC MỚI NÀY
     PlanDetailResponse updatePlanDetails(String shareableLink, UpdatePlanDetailsRequest request, String userEmail);
 
     void leavePlan(String shareableLink, String userEmail);
 
-    // XÓA PHƯƠNG THỨC NÀY
-    // void deletePlan(String shareableLink, String userEmail);
+    // void deletePlan(String shareableLink, String userEmail); // Đã comment out
 
     List<PlanSummaryResponse> getMyPlans(String userEmail, String searchTerm);
 
-    // --- Task Management Methods ---
     TaskResponse addTaskToPlan(String shareableLink, ManageTaskRequest request, String userEmail);
 
     TaskResponse updateTaskInPlan(String shareableLink, Long taskId, ManageTaskRequest request, String userEmail);
@@ -43,15 +39,8 @@ public interface PlanService {
 
     List<TaskResponse> reorderTasksInPlan(String shareableLink, ReorderTasksRequest request, String ownerEmail);
 
-    // --- THÊM MỚI ---
-    /**
-     * Lấy danh sách công việc (Task List) cho Cột Phải theo ngày được chọn.
-     */
     List<TaskResponse> getTasksByDate(String shareableLink, LocalDate date, String userEmail);
-    // --- KẾT THÚC THÊM ---
 
-
-    // --- Member & Status Management Methods ---
     void removeMemberFromPlan(String shareableLink, Integer memberUserId, String ownerEmail);
 
     void transferOwnership(String shareableLink, TransferOwnershipRequest request, String currentOwnerEmail);
@@ -59,4 +48,14 @@ public interface PlanService {
     PlanDetailResponse archivePlan(String shareableLink, String ownerEmail);
 
     PlanDetailResponse unarchivePlan(String shareableLink, String ownerEmail);
+
+    // --- THÊM PHƯƠNG THỨC MỚI ---
+    /**
+     * Xóa vĩnh viễn một kế hoạch (Hard Delete).
+     * Chỉ thực hiện được nếu user là Owner VÀ kế hoạch đang ở trạng thái ARCHIVED.
+     *
+     * @param shareableLink Link của kế hoạch
+     * @param ownerEmail    Email của người thực hiện
+     */
+    void deletePlanPermanently(String shareableLink, String ownerEmail);
 }

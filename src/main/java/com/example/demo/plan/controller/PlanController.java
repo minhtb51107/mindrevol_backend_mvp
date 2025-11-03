@@ -56,7 +56,7 @@ public class PlanController {
 
     // --- Endpoint cập nhật thông tin Plan (CŨ - DÙNG CHO TASK NGÀY ĐẦU) ---
     @PutMapping("/{shareableLink}")
-    @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)") // Thêm check quyền Owner
+    @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)") // Giữ nguyên, vì plan phải ACTIVE
     public ResponseEntity<?> updatePlan(@PathVariable String shareableLink, @Valid @RequestBody UpdatePlanRequest request, Authentication authentication) {
         PlanDetailResponse updatedPlan = planService.updatePlan(shareableLink, request, authentication.getName());
         return ResponseEntity.ok(updatedPlan);
@@ -64,7 +64,7 @@ public class PlanController {
 
     // --- THÊM ENDPOINT MỚI ĐỂ SỬA CHI TIẾT ---
     @PutMapping("/{shareableLink}/details")
-    @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)")
+    @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)") // Giữ nguyên, vì plan phải ACTIVE
     public ResponseEntity<PlanDetailResponse> updatePlanDetails(
             @PathVariable String shareableLink,
             @Valid @RequestBody UpdatePlanDetailsRequest request,
@@ -77,24 +77,32 @@ public class PlanController {
 
 
     // --- Endpoint rời Plan ---
-    // (Sửa PreAuthorize để check rõ hơn)
+    // (SỬA) Dùng hàm mới "RegardlessOfStatus"
     @DeleteMapping("/{shareableLink}/leave")
-    @PreAuthorize("@planSecurity.isMemberAndNotOwner(#shareableLink, authentication.name)")
+    @PreAuthorize("@planSecurity.isMemberAndNotOwner(#shareableLink, authentication.name)") // <-- (SỬA) Dùng hàm đã được cập nhật
     public ResponseEntity<Void> leavePlan(@PathVariable String shareableLink, Authentication authentication) {
         planService.leavePlan(shareableLink, authentication.getName());
         return ResponseEntity.noContent().build(); // 204 No Content
     }
 
     // --- Endpoint xóa Plan (ĐÃ XÓA) ---
-    // BẠN ĐÃ CÓ ENDPOINT NÀY, TÔI KHUYẾN NGHỊ XÓA BỎ NÓ ĐỂ ĐẢM BẢO AN TOÀN
     /*
-    @DeleteMapping("/{shareableLink}")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Void> deletePlan(@PathVariable String shareableLink, Authentication authentication) {
-        planService.deletePlan(shareableLink, authentication.getName());
+    ... (Comment giữ nguyên)
+    */
+    
+    // --- THÊM ENDPOINT XÓA VĨNH VIỄN ---
+    // (SỬA) Dùng hàm mới "isOwnerRegardlessOfStatus"
+    @DeleteMapping("/{shareableLink}/permanent-delete")
+    @PreAuthorize("@planSecurity.isOwnerRegardlessOfStatus(#shareableLink, authentication.name)")
+    public ResponseEntity<Void> deletePlanPermanently(
+            @PathVariable String shareableLink,
+            Authentication authentication) {
+        
+        planService.deletePlanPermanently(shareableLink, authentication.getName());
         return ResponseEntity.noContent().build(); // 204 No Content
     }
-    */
+    // --- KẾT THÚC THÊM MỚI ---
+
 
     // --- Endpoint lấy danh sách Plan của User ---
     @GetMapping("/my-plans")
@@ -108,46 +116,47 @@ public class PlanController {
     }
 
     // --- Endpoints quản lý Task (GIỮ NGUYÊN) ---
+    // (Vì các hàm này đều check "ensurePlanIsNotArchived" trong service)
 
-    // Thêm Task mới vào Plan (cần có taskDate trong request)
     @PostMapping("/{shareableLink}/tasks")
     @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)")
     public ResponseEntity<TaskResponse> addTaskToPlan(
+            //... (Giữ nguyên)
             @PathVariable String shareableLink,
-            @Valid @RequestBody ManageTaskRequest request, // Request đã có trường taskDate
+            @Valid @RequestBody ManageTaskRequest request,
             Authentication authentication) {
         TaskResponse newTask = planService.addTaskToPlan(shareableLink, request, authentication.getName());
         return new ResponseEntity<>(newTask, HttpStatus.CREATED);
     }
 
-    // Lấy danh sách Task theo ngày cụ thể (cho Cột Phải)
     @GetMapping("/{shareableLink}/tasks-by-date")
-    @PreAuthorize("@planSecurity.isMember(#shareableLink, authentication.name)") // Chỉ member mới được xem task
+    @PreAuthorize("@planSecurity.isMember(#shareableLink, authentication.name)") 
     public ResponseEntity<List<TaskResponse>> getTasksByDate(
+            //... (Giữ nguyên)
             @PathVariable String shareableLink,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, // Nhận ngày dạng YYYY-MM-DD
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             Authentication authentication
     ) {
         List<TaskResponse> tasks = planService.getTasksByDate(shareableLink, date, authentication.getName());
         return ResponseEntity.ok(tasks);
     }
 
-    // Cập nhật Task (có thể bao gồm cả taskDate để chuyển ngày)
     @PutMapping("/{shareableLink}/tasks/{taskId}")
     @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)")
     public ResponseEntity<TaskResponse> updateTaskInPlan(
+            //... (Giữ nguyên)
             @PathVariable String shareableLink,
             @PathVariable Long taskId,
-            @Valid @RequestBody ManageTaskRequest request, // Request có thể chứa taskDate mới
+            @Valid @RequestBody ManageTaskRequest request,
             Authentication authentication) {
         TaskResponse updatedTask = planService.updateTaskInPlan(shareableLink, taskId, request, authentication.getName());
         return ResponseEntity.ok(updatedTask);
     }
 
-    // Xóa Task
     @DeleteMapping("/{shareableLink}/tasks/{taskId}")
     @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)")
     public ResponseEntity<Void> deleteTaskFromPlan(
+            //... (Giữ nguyên)
             @PathVariable String shareableLink,
             @PathVariable Long taskId,
             Authentication authentication) {
@@ -155,12 +164,12 @@ public class PlanController {
         return ResponseEntity.noContent().build();
     }
 
-    // Sắp xếp lại thứ tự Task trong một ngày
     @PutMapping("/{shareableLink}/task-order")
     @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)")
     public ResponseEntity<List<TaskResponse>> reorderTasks(
+            //... (Giữ nguyên)
             @PathVariable String shareableLink,
-            @Valid @RequestBody ReorderTasksRequest request, // Request đã có trường taskDate và orderedTaskIds
+            @Valid @RequestBody ReorderTasksRequest request,
             Authentication authentication) {
         String ownerEmail = authentication.getName();
         List<TaskResponse> reorderedTasks = planService.reorderTasksInPlan(shareableLink, request, ownerEmail);
@@ -169,11 +178,11 @@ public class PlanController {
     // --- Kết thúc Endpoints quản lý Task ---
 
 
-    // --- Endpoints quản lý Thành viên (GIỮ NGUYÊN) ---
+    // --- Endpoints quản lý Thành viên (SỬA) ---
 
-    // Xóa thành viên khỏi Plan
+    // (SỬA) Dùng hàm mới "isOwnerRegardlessOfStatus" (để có thể xóa member khỏi plan đã lưu trữ)
     @DeleteMapping("/{shareableLink}/members/{userId}")
-    @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)")
+    @PreAuthorize("@planSecurity.isOwnerRegardlessOfStatus(#shareableLink, authentication.name)")
     public ResponseEntity<Void> removeMember(
             @PathVariable String shareableLink,
             @PathVariable Integer userId,
@@ -183,9 +192,9 @@ public class PlanController {
         return ResponseEntity.noContent().build();
     }
 
-    // Chuyển quyền sở hữu Plan
+    // (SỬA) Dùng hàm mới "isOwnerRegardlessOfStatus"
     @PatchMapping("/{shareableLink}/transfer-ownership")
-    @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)")
+    @PreAuthorize("@planSecurity.isOwnerRegardlessOfStatus(#shareableLink, authentication.name)")
     public ResponseEntity<Void> transferOwnership(
             @PathVariable String shareableLink,
             @Valid @RequestBody TransferOwnershipRequest request,
@@ -195,11 +204,11 @@ public class PlanController {
         return ResponseEntity.noContent().build(); // 204 No Content
     }
 
-    // --- Endpoints quản lý Trạng thái Plan (GIỮ NGUYÊN) ---
+    // --- Endpoints quản lý Trạng thái Plan (SỬA) ---
 
-    // Lưu trữ Plan
+    // (SỬA) Dùng hàm mới "isOwnerRegardlessOfStatus" (vì plan có thể là COMPLETED)
     @PatchMapping("/{shareableLink}/archive")
-    @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)")
+    @PreAuthorize("@planSecurity.isOwnerRegardlessOfStatus(#shareableLink, authentication.name)")
     public ResponseEntity<PlanDetailResponse> archivePlan(
             @PathVariable String shareableLink,
             Authentication authentication) {
@@ -208,9 +217,9 @@ public class PlanController {
         return ResponseEntity.ok(updatedPlan);
     }
 
-    // Khôi phục Plan từ lưu trữ
+    // (SỬA) Dùng hàm mới "isOwnerRegardlessOfStatus" (vì plan đang là ARCHIVED)
     @PatchMapping("/{shareableLink}/unarchive")
-    @PreAuthorize("@planSecurity.isOwner(#shareableLink, authentication.name)")
+    @PreAuthorize("@planSecurity.isOwnerRegardlessOfStatus(#shareableLink, authentication.name)")
     public ResponseEntity<PlanDetailResponse> unarchivePlan(
             @PathVariable String shareableLink,
             Authentication authentication) {

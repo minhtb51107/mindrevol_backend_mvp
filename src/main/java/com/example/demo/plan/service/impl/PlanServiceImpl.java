@@ -168,15 +168,20 @@ public class PlanServiceImpl implements PlanService {
     @Override
     @Transactional(readOnly = true)
     public Object getPlanDetails(String shareableLink, String userEmail) {
-        // SỬA: Dùng findPlanByShareableLink (an toàn, user thường không thể xem plan đã ARCHIVED)
-        Plan plan = findPlanByShareableLink(shareableLink);
+        // (SỬA) Dùng hàm helper mới để có thể tìm thấy plan đã ARCHIVED
+        Plan plan = findPlanRegardlessOfStatus(shareableLink);
         User user = findUserByEmail(userEmail);
 
         // Nếu là thành viên, trả về chi tiết đầy đủ (PlanDetailResponse)
         if (isUserMemberOfPlan(plan, user.getId())) {
-            // PlanDetailResponse sẽ không còn list 'dailyTasks' nữa
+            // (SỬA) Kể cả khi là thành viên, nếu plan đã lưu trữ,
+            // User vẫn có thể xem (nhưng UI sẽ hiển thị là "Đã lưu trữ")
             return planMapper.toPlanDetailResponse(plan);
         } else {
+            // (SỬA) Nếu không phải thành viên VÀ plan đã lưu trữ, ném lỗi 403/404
+            if (plan.getStatus() == PlanStatus.ARCHIVED) {
+                 throw new ResourceNotFoundException("Không tìm thấy kế hoạch với link: " + shareableLink);
+            }
             // Nếu không phải thành viên, trả về thông tin công khai (PlanPublicResponse)
             return planMapper.toPlanPublicResponse(plan);
         }
@@ -697,6 +702,33 @@ public class PlanServiceImpl implements PlanService {
          log.info("Unarchived plan {}. New status: {}. Sent WebSocket update to {}", shareableLink, newStatus, destination);
         return response;
     }
+
+    // --- THÊM PHƯƠNG THỨC MỚI ---
+    @Override
+    @Transactional
+    public void deletePlanPermanently(String shareableLink, String ownerEmail) {
+        // Bước 1: Tìm plan bất kể trạng thái (vượt qua @Where)
+        Plan plan = findPlanRegardlessOfStatus(shareableLink);
+        User owner = findUserByEmail(ownerEmail);
+
+        // Bước 2: Đảm bảo là chủ sở hữu
+        ensureUserIsOwner(plan, owner.getId());
+
+        // Bước 3: (QUAN TRỌNG NHẤT) Đảm bảo plan ĐÃ được lưu trữ (ARCHIVED)
+        // Điều này thực hiện logic "an toàn 2 bước" của bạn
+        if (plan.getStatus() != PlanStatus.ARCHIVED) {
+            throw new BadRequestException("Chỉ có thể xóa vĩnh viễn các kế hoạch đã được lưu trữ (Archived).");
+        }
+
+        // Bước 4: Thực hiện Hard Delete
+        // ON DELETE CASCADE sẽ xóa tất cả members, tasks, check-ins, comments... liên quan.
+        planRepository.delete(plan);
+
+        log.info("User {} permanently deleted plan {} (ID: {})", ownerEmail, shareableLink, plan.getId());
+
+        // Không cần gửi WebSocket, vì plan đã biến mất vĩnh viễn.
+    }
+    // --- KẾT THÚC THÊM MỚI ---
 
     // --- Helper Methods ---
     private User findUserByEmail(String email) {

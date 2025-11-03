@@ -18,7 +18,13 @@ public interface PlanMemberRepository extends JpaRepository<PlanMember, Integer>
     @Query("SELECT pm FROM PlanMember pm JOIN FETCH pm.plan p WHERE pm.user.id = :userId AND p.status <> 'ARCHIVED'")
     List<PlanMember> findByUserIdWithPlan(@Param("userId") Integer userId);
     
-    // --- THÊM 2 PHƯƠNG THỨC MỚI BÊN DƯỚI ---
+    // --- THÊM 3 PHƯƠNG THỨC MỚI BÊN DƯỚI ---
+
+    /**
+     * (MỚI) Chỉ tìm các kế hoạch đã ARCHIVED của một User.
+     */
+    @Query("SELECT pm FROM PlanMember pm JOIN FETCH pm.plan p WHERE pm.user.id = :userId AND p.status = 'ARCHIVED'")
+    List<PlanMember> findByUserIdWithArchivedPlan(@Param("userId") Integer userId);
 
     /**
      * Tìm PlanMember bằng shareableLink của Plan và ID của User.
