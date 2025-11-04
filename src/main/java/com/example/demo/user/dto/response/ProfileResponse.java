@@ -1,3 +1,4 @@
+// File: src/main/java/com/example/demo/user/dto/response/ProfileResponse.java
 package com.example.demo.user.dto.response;
 
 import lombok.Builder;
@@ -6,12 +7,17 @@ import lombok.Setter;
 
 @Getter
 @Setter
-@Builder
+@Builder // Đảm bảo bạn có @Builder
 public class ProfileResponse {
-    private Integer id;
+    private String id;
     private String email;
+    private String status;
+    private String userType;
     private String fullname;
-    private String photoUrl; // Sử dụng photoUrl thay vì photo
-    private String userType; // CUSTOMER or EMPLOYEE
-    private String status;   // ACTIVE, PENDING_ACTIVATION, SUSPENDED
+    
+    // ĐẢM BẢO TÊN TRƯỜNG LÀ 'photoUrl' (chữ 'U' viết hoa)
+    private String photoUrl; 
+    
+    // ĐẢM BẢO BẠN CŨNG CÓ TRƯỜNG 'bio'
+    private String bio; 
 }

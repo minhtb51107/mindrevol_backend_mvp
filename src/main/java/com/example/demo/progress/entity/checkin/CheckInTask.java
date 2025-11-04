@@ -1,5 +1,8 @@
 package com.example.demo.progress.entity.checkin;
 
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
+
 import com.example.demo.plan.entity.Task;
 import jakarta.persistence.*;
 import lombok.*;
@@ -22,6 +25,7 @@ public class CheckInTask {
     private CheckInEvent checkInEvent;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "task_id", nullable = false)
-    private Task task; // Task đã được hoàn thành
+    @JoinColumn(name = "task_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL) // <-- THÊM DÒNG NÀY
+    private Task task;
 }

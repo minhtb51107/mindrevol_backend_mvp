@@ -1,3 +1,4 @@
+// file: UpdateProfileRequest.java
 package com.example.demo.user.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
@@ -15,4 +16,8 @@ public class UpdateProfileRequest {
 
     // Cho phép cập nhật URL ảnh đại diện (tùy chọn)
     private String photoUrl;
+
+    // --- THÊM TRƯỜNG NÀY ---
+    @Size(max = 200, message = "Giới thiệu không được quá 200 ký tự")
+    private String bio;
 }

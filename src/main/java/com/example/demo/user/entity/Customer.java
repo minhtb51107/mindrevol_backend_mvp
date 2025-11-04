@@ -3,6 +3,7 @@
 package com.example.demo.user.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 
 @Getter
@@ -32,4 +33,7 @@ public class Customer {
 
     @Column(name = "photo", length = 255)
     private String photo;
+    
+    @Size(max = 200, message = "Giới thiệu không được quá 200 ký tự")
+    private String bio;
 }

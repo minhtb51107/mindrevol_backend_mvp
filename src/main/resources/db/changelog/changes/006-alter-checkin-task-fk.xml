@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+      xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="6" author="minhtb-fix-delete-task">
+        <comment>Drop and recreate FK on check_in_tasks to allow ON DELETE SET NULL</comment>
+
+        <dropForeignKeyConstraint
+            baseTableName="check_in_tasks"
+            constraintName="fkqoesap5mu93nfbcy3xkx6pm97"/>
+
+        <addForeignKeyConstraint
+            baseTableName="check_in_tasks"
+            baseColumnNames="task_id"
+            constraintName="fkqoesap5mu93nfbcy3xkx6pm97_setnull" 
+            referencedTableName="plan_tasks"
+            referencedColumnNames="id"
+            onDelete="SET NULL"/> 
+            
+    </changeSet>
+
+</databaseChangeLog>
