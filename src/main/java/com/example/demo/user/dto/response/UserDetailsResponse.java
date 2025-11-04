@@ -15,4 +15,5 @@ public class UserDetailsResponse {
     private String userType; // "CUSTOMER" hoặc "EMPLOYEE"
     private Set<String> roles;
     private Set<String> permissions;
+    private String authProvider; // Thêm trường này
 };

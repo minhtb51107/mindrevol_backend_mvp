@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.OffsetDateTime;
 import java.util.List;
+import org.hibernate.annotations.ColumnDefault; // <-- THÊM IMPORT NÀY
 
 import com.example.demo.auth.entity.UserSession;
 
@@ -26,12 +27,19 @@ public class User {
     @Column(name = "password", nullable = false, length = 255)
     private String password;
 
-    @Builder.Default // <-- THÊM ANNOTATION NÀY
+    @Builder.Default 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private UserStatus status = UserStatus.PENDING_ACTIVATION;
+    
+    // --- (PHẦN SỬA ĐỔI) ---
+    @Column(name = "auth_provider", length = 20, nullable = false)
+    @ColumnDefault("'LOCAL'") // <-- THÊM DÒNG NÀY (Lưu ý dấu ' bên trong)
+    @Builder.Default
+    private String authProvider = "LOCAL";
+    // --- (KẾT THÚC SỬA ĐỔI) ---
 
-    @Builder.Default // <-- THÊM ANNOTATION NÀY
+    @Builder.Default
     @Column(name = "created_at", nullable = false, updatable = false, 
             columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private OffsetDateTime createdAt = OffsetDateTime.now();
