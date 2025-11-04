@@ -36,6 +36,8 @@ public class CreatePlanRequest {
 
     @Valid // Thêm Valid để kiểm tra các TaskRequest bên trong
     private List<TaskRequest> dailyTasks = new ArrayList<>();
+    
+    private boolean repeatTasks; // <-- THÊM TRƯỜNG NÀY
 
     // --- THÊM INNER CLASS TaskRequest ---
     @Getter

@@ -1,6 +1,7 @@
 package com.example.demo.plan.service;
 
 import com.example.demo.plan.dto.request.CreatePlanRequest;
+import com.example.demo.plan.dto.request.CreatePlanWithScheduleRequest;
 import com.example.demo.plan.dto.request.ManageTaskRequest;
 import com.example.demo.plan.dto.request.ReorderTasksRequest;
 import com.example.demo.plan.dto.request.TransferOwnershipRequest;
@@ -58,4 +59,6 @@ public interface PlanService {
      * @param ownerEmail    Email của người thực hiện
      */
     void deletePlanPermanently(String shareableLink, String ownerEmail);
+    
+    PlanDetailResponse createPlanWithSchedule(CreatePlanWithScheduleRequest request, String creatorEmail);
 }

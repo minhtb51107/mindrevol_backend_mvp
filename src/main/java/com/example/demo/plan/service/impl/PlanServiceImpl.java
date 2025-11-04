@@ -3,6 +3,7 @@ package com.example.demo.plan.service.impl;
 import com.example.demo.feed.entity.FeedEventType;
 import com.example.demo.feed.service.FeedService;
 import com.example.demo.plan.dto.request.CreatePlanRequest;
+import com.example.demo.plan.dto.request.CreatePlanWithScheduleRequest;
 import com.example.demo.plan.dto.request.ManageTaskRequest;
 import com.example.demo.plan.dto.request.ReorderTasksRequest;
 import com.example.demo.plan.dto.request.TransferOwnershipRequest;
@@ -74,17 +75,11 @@ public class PlanServiceImpl implements PlanService {
     public PlanDetailResponse createPlan(CreatePlanRequest request, String creatorEmail) {
         User creator = findUserByEmail(creatorEmail);
 
-        // Validate ngày bắt đầu không phải quá khứ
         if (request.getStartDate().isBefore(LocalDate.now())) {
             throw new BadRequestException("Ngày bắt đầu không thể là một ngày trong quá khứ.");
         }
-        
-        // TÍNH TOÁN TRẠNG THÁI BAN ĐẦU
-        PlanStatus initialStatus = request.getStartDate().isAfter(LocalDate.now()) ? PlanStatus.ACTIVE : PlanStatus.ACTIVE;
-        // SỬA: Enum của bạn không có UPCOMING, nên ta dùng ACTIVE cho cả hai
-        // Nếu bạn thêm UPCOMING vào enum PlanStatus, hãy dùng dòng này:
-        // PlanStatus initialStatus = request.getStartDate().isAfter(LocalDate.now()) ? PlanStatus.UPCOMING : PlanStatus.ACTIVE;
 
+        PlanStatus initialStatus = request.getStartDate().isAfter(LocalDate.now()) ? PlanStatus.ACTIVE : PlanStatus.ACTIVE;
 
         Plan newPlan = Plan.builder()
                 .title(request.getTitle())
@@ -95,23 +90,110 @@ public class PlanServiceImpl implements PlanService {
                 .creator(creator)
                 .members(new ArrayList<>())
                 .dailyTasks(new ArrayList<>()) 
-                .status(initialStatus) // SỬA: Dùng trạng thái đã tính toán
+                .status(initialStatus)
                 .build();
 
-        // Thêm các task ban đầu (nếu có) cho ngày bắt đầu
-        if (request.getDailyTasks() != null) {
-            IntStream.range(0, request.getDailyTasks().size())
+        // --- BẮT ĐẦU LOGIC MỚI ---
+        List<CreatePlanRequest.TaskRequest> taskReqs = request.getDailyTasks();
+
+        if (taskReqs != null && !taskReqs.isEmpty()) {
+
+            if (request.isRepeatTasks()) {
+                // LUỒNG 1: Lặp lại task cho mọi ngày (Template Flow)
+                log.info("Repeating {} tasks for {} days...", taskReqs.size(), newPlan.getDurationInDays());
+
+                for (int day = 0; day < newPlan.getDurationInDays(); day++) {
+                    LocalDate currentDate = newPlan.getStartDate().plusDays(day);
+
+                    IntStream.range(0, taskReqs.size())
+                        .mapToObj(i -> {
+                            CreatePlanRequest.TaskRequest taskReq = taskReqs.get(i);
+                            return Task.builder()
+                                    .description(taskReq.getDescription())
+                                    .deadlineTime(taskReq.getDeadlineTime()) // Lấy từ request
+                                    .order(i)
+                                    .plan(newPlan)
+                                    .taskDate(currentDate) // <-- Gán cho ngày hiện tại trong vòng lặp
+                                    .build();
+                        })
+                        .forEach(newPlan::addTask);
+                }
+
+            } else {
+                // LUỒNG 2: Chỉ thêm task cho Ngày 1 (Logic cũ của bạn)
+                log.info("Adding {} tasks for start date only...", taskReqs.size());
+
+                IntStream.range(0, taskReqs.size())
                     .mapToObj(i -> {
-                        CreatePlanRequest.TaskRequest taskReq = request.getDailyTasks().get(i);
+                        CreatePlanRequest.TaskRequest taskReq = taskReqs.get(i);
                         return Task.builder()
                                 .description(taskReq.getDescription())
-                                .deadlineTime(taskReq.getDeadlineTime())
+                                .deadlineTime(taskReq.getDeadlineTime()) // Lấy từ request
                                 .order(i)
                                 .plan(newPlan)
-                                .taskDate(newPlan.getStartDate()) // Gán task cho ngày bắt đầu
+                                .taskDate(newPlan.getStartDate()) // <-- Chỉ gán cho ngày bắt đầu
                                 .build();
                     })
-                    .forEach(newPlan::addTask); 
+                    .forEach(newPlan::addTask);
+            }
+        }
+        // --- KẾT THÚC LOGIC MỚI ---
+
+        // Thêm người tạo làm chủ sở hữu (giữ nguyên)
+        PlanMember creatorAsMember = PlanMember.builder()
+                .plan(newPlan)
+                .user(creator)
+                .role(MemberRole.OWNER)
+                .build();
+        newPlan.getMembers().add(creatorAsMember);
+
+        Plan savedPlan = planRepository.save(newPlan);
+        log.info("Plan created with ID: {} and shareableLink: {}", savedPlan.getId(), savedPlan.getShareableLink());
+
+        return planMapper.toPlanDetailResponse(savedPlan);
+    }
+    
+    @Override
+    public PlanDetailResponse createPlanWithSchedule(CreatePlanWithScheduleRequest request, String creatorEmail) {
+        User creator = findUserByEmail(creatorEmail);
+
+        PlanStatus initialStatus = request.getStartDate().isAfter(LocalDate.now()) ? PlanStatus.ACTIVE : PlanStatus.ACTIVE;
+
+        Plan newPlan = Plan.builder()
+                .title(request.getTitle())
+                .description(request.getDescription())
+                .durationInDays(request.getDurationInDays())
+                .dailyGoal(request.getDailyGoal())
+                .startDate(request.getStartDate())
+                .creator(creator)
+                .members(new ArrayList<>())
+                .dailyTasks(new ArrayList<>()) 
+                .status(initialStatus)
+                .build();
+
+        // Dùng Map để theo dõi 'order' cho mỗi ngày
+        Map<LocalDate, Integer> orderTracker = new HashMap<>();
+
+        if (request.getTasks() != null) {
+            log.info("Creating plan with {} scheduled tasks...", request.getTasks().size());
+
+            for (CreatePlanWithScheduleRequest.ScheduledTaskRequest taskReq : request.getTasks()) {
+                LocalDate taskDate = taskReq.getTaskDate();
+
+                // Lấy và tăng 'order' cho ngày này
+                int order = orderTracker.getOrDefault(taskDate, 0);
+                orderTracker.put(taskDate, order + 1);
+
+                Task newTask = Task.builder()
+                        .description(taskReq.getDescription())
+                        .deadlineTime(taskReq.getDeadlineTime())
+                        .taskDate(taskDate)
+                        .order(order)
+                        .plan(newPlan)
+                        .build();
+
+                newPlan.addTask(newTask);
+            }
         }
 
         // Thêm người tạo làm chủ sở hữu
@@ -122,10 +204,10 @@ public class PlanServiceImpl implements PlanService {
                 .build();
         newPlan.getMembers().add(creatorAsMember);
 
-        // Lưu Plan (bao gồm cả Member và Task nhờ CascadeType.ALL)
+        // Lưu Plan (cascade lưu tất cả task mới)
         Plan savedPlan = planRepository.save(newPlan);
-        log.info("Plan created with ID: {} and shareableLink: {}", savedPlan.getId(), savedPlan.getShareableLink());
-        // Map sang DTO để trả về
+        log.info("Plan (with schedule) created with ID: {}", savedPlan.getId());
+
         return planMapper.toPlanDetailResponse(savedPlan);
     }
 
@@ -724,64 +806,48 @@ public class PlanServiceImpl implements PlanService {
         User owner = findUserByEmail(ownerEmail);
         ensureUserIsOwner(plan, owner.getId());
         if (plan.getStatus() != PlanStatus.ARCHIVED) {
-            throw new BadRequestException("...");
+            throw new BadRequestException("Chỉ có thể xóa vĩnh viễn kế hoạch đã lưu trữ.");
         }
 
-        // --- BẮT ĐẦU DỌN DẸP TẤT CẢ LIÊN KẾT ---
-        
-        List<PlanMember> members = plan.getMembers();
-        List<Integer> memberIds = members.stream().map(PlanMember::getId).collect(Collectors.toList());
-        List<Task> tasks = plan.getDailyTasks();
-        List<Long> taskIds = tasks.stream().map(Task::getId).collect(Collectors.toList());
+        List<Long> taskIds = plan.getDailyTasks().stream().map(Task::getId).collect(Collectors.toList());
+        List<Integer> memberIds = plan.getMembers().stream().map(PlanMember::getId).collect(Collectors.toList());
 
-        // 2. Dọn dẹp các liên kết trỏ đến Task (dùng query @Modifying)
+        // --- BƯỚC 1: DỌN DẸP CÁC LIÊN KẾT BÊN NGOÀI (KHÔNG CASCADE) ---
+
+        // Xóa các FeedEvent trỏ đến Plan này
+        feedEventRepository.deleteAllByPlanId(plan.getId());
+
+        // Xóa các CheckInTask trỏ đến Task (nếu có)
         if (!taskIds.isEmpty()) {
             checkInTaskRepository.deleteAllByTaskIdIn(taskIds);
-            // (Bạn cũng cần thêm các hàm tương tự cho TaskComment và TaskAttachment nếu chúng có liên kết)
-            // taskCommentRepository.deleteAllByTaskIdIn(taskIds); 
+
+            // !! QUAN TRỌNG: Bạn cũng phải xóa TaskComment và TaskAttachment
+            // Bạn cần thêm 2 repository và 2 phương thức này
+            // taskCommentRepository.deleteAllByTaskIdIn(taskIds);
             // taskAttachmentRepository.deleteAllByTaskIdIn(taskIds);
         }
 
-        // 3. Dọn dẹp liên kết TỚI Plan (FeedEvent)
-        feedEventRepository.deleteAllByPlanId(plan.getId());
-
-        // 4. Dọn dẹp liên kết TỚI PlanMember (CheckInEvent, DailyProgress)
+        // Xóa các CheckInEvent trỏ đến PlanMember (nếu có)
         if (!memberIds.isEmpty()) {
-            // 4a. Dọn dẹp CheckInEvent (vì nó trỏ đến PlanMember)
+            // Dùng .deleteAll() thay vì .deleteAllInBatch() để session được cập nhật!
             List<CheckInEvent> eventsToDelete = checkInEventRepository.findAllByPlanMemberIdIn(memberIds);
-            checkInEventRepository.deleteAllInBatch(eventsToDelete); // Dùng InBatch được vì PlanMember không có list trỏ ngược lại
+            if (!eventsToDelete.isEmpty()) {
+                // Giả sử CheckInEvent có các con (attachments, links), bạn phải xóa chúng trước
+                // checkInAttachmentRepository.deleteAllByCheckInEventIn(eventsToDelete);
+                // checkInLinkRepository.deleteAllByCheckInEventIn(eventsToDelete);
 
-            // 4b. Dọn dẹp DailyProgress (và các con của nó)
-            List<DailyProgress> progressList = dailyProgressRepository.findAllByPlanMemberIdIn(memberIds);
-            if (progressList != null && !progressList.isEmpty()) {
-                List<Long> progressIds = progressList.stream().map(DailyProgress::getId).collect(Collectors.toList());
-                
-                // Xóa các cháu (ProgressComment, ProgressReaction)
-                progressCommentRepository.deleteAllByDailyProgressIdIn(progressIds);
-                progressReactionRepository.deleteAllByDailyProgressIdIn(progressIds); // (Cần tạo repo này)
-            }
-            
-            // 4c. (QUAN TRỌNG) Cắt đứt liên kết trong session
-            // Ta phải làm điều này *trước khi* xóa DailyProgress
-            for (PlanMember member : members) {
-                // Dùng getter từ file PlanMember.java
-                if (member.getDailyProgressList() != null) {
-                    member.getDailyProgressList().clear(); 
-                }
-            }
-            
-            // 4d. Bây giờ mới xóa DailyProgress
-            if (progressList != null && !progressList.isEmpty()) {
-                dailyProgressRepository.deleteAllInBatch(progressList);
+                checkInEventRepository.deleteAll(eventsToDelete); // Dùng .deleteAll()
             }
         }
-        
-        // 5. (QUAN TRỌNG) Cắt đứt liên kết của Plan
-        plan.getMembers().clear();
-        plan.getDailyTasks().clear();
-        // --- KẾT THÚC DỌN DẸP ---
 
-        // 6. Xóa Plan
+        // --- BƯỚC 2: XÓA PLAN CHA ---
+        // CascadeType.ALL + orphanRemoval = true sẽ tự động lo phần còn lại:
+        // 1. Xóa Plan ->
+        // 2. Xóa PlanMember (từ plan.getMembers()) ->
+        // 3. Xóa Task (từ plan.getDailyTasks()) ->
+        // 4. Xóa DailyProgress (từ member.getDailyProgressList()) ->
+        // 5. Xóa ProgressComment, ProgressReaction (nếu DailyProgress có cascade)
+
         planRepository.delete(plan);
 
         log.info("User {} permanently deleted plan {} (ID: {})", ownerEmail, shareableLink, plan.getId());
