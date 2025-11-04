@@ -55,10 +55,11 @@ public class ProgressMapper {
                         .collect(Collectors.toList());
 
         List<TimelineResponse.CompletedTaskInfo> tasks = event.getCompletedTasks() == null ? Collections.emptyList() :
-                event.getCompletedTasks().stream()
-                        .map(CheckInTask::getTask)
-                        .map(this::toCompletedTaskInfo)
-                        .collect(Collectors.toList());
+            event.getCompletedTasks().stream()
+                    .map(CheckInTask::getTask)
+                    .filter(java.util.Objects::nonNull) // <-- THÊM DÒNG NÀY
+                    .map(this::toCompletedTaskInfo)
+                    .collect(Collectors.toList());
 
         // === THÊM LOGIC MAP MỚI CHO COMMENT/REACTION ===
 
@@ -74,7 +75,9 @@ public class ProgressMapper {
         // 3. Lấy danh sách ID Task
         List<Long> completedTaskIds = event.getCompletedTasks() == null ? Collections.emptyList() :
                 event.getCompletedTasks().stream()
-                        .map(checkInTask -> checkInTask.getTask().getId())
+                        .map(CheckInTask::getTask) // Lấy Task object
+                        .filter(java.util.Objects::nonNull) // Lọc ra các Task không bị null
+                        .map(Task::getId) // Chỉ bây giờ mới gọi getId()
                         .collect(Collectors.toList());
         // === KẾT THÚC LOGIC MAP MỚI ===
 
