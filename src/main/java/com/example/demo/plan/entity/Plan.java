@@ -19,7 +19,7 @@ import java.util.UUID;
 @Builder
 @Entity
 @Table(name = "plans")
-@Where(clause = "status <> 'ARCHIVED'") // <-- THÊM DÒNG NÀY
+//@Where(clause = "status <> 'ARCHIVED'") // <-- THÊM DÒNG NÀY
 public class Plan {
 
     @Id

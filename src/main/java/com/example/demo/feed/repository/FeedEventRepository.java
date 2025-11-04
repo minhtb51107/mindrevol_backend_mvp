@@ -4,6 +4,7 @@ import com.example.demo.feed.entity.FeedEvent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -24,4 +25,8 @@ public interface FeedEventRepository extends JpaRepository<FeedEvent, Long> {
 
     // Có thể thêm các query khác nếu cần, ví dụ: lấy feed chỉ cho 1 plan cụ thể
     // Page<FeedEvent> findByPlanIdOrderByTimestampDesc(Integer planId, Pageable pageable);
+    
+    @Modifying
+    @Query("DELETE FROM FeedEvent fe WHERE fe.plan.id = :planId")
+    void deleteAllByPlanId(@Param("planId") Integer planId);
 }

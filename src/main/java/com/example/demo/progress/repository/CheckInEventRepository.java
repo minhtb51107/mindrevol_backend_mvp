@@ -31,4 +31,6 @@ public interface CheckInEventRepository extends JpaRepository<CheckInEvent, Long
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end);
 
+ // Thêm phương thức này
+    List<CheckInEvent> findAllByPlanMemberIdIn(List<Integer> memberIds);
 }

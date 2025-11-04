@@ -1,8 +1,8 @@
 package com.example.demo.progress.entity;
 
 import com.example.demo.plan.entity.PlanMember;
-// import com.example.demo.community.entity.ProgressComment; // <-- ĐÃ XÓA
-// import com.example.demo.community.entity.ProgressReaction; // <-- ĐÃ XÓA
+ import com.example.demo.community.entity.ProgressComment; // <-- ĐÃ XÓA
+ import com.example.demo.community.entity.ProgressReaction; // <-- ĐÃ XÓA
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -48,7 +48,7 @@ public class DailyProgress {
     private List<String> evidence = new ArrayList<>(); 
 
     // === XÓA BỎ CÁC LIÊN KẾT GÂY LỖI ===
-    /*
+    
     @OneToMany(mappedBy = "dailyProgress", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("createdAt ASC") 
     @Builder.Default
@@ -57,7 +57,7 @@ public class DailyProgress {
     @OneToMany(mappedBy = "dailyProgress", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<ProgressReaction> reactions = new HashSet<>();
-    */
+    
     // === KẾT THÚC XÓA BỎ ===
 
     // Giữ lại completedTaskIds là Set

@@ -1,5 +1,6 @@
 package com.example.demo.community.entity;
 
+import com.example.demo.progress.entity.DailyProgress;
 import com.example.demo.progress.entity.checkin.CheckInEvent; // <-- Import mới
 import com.example.demo.user.entity.User;
 import jakarta.persistence.*;
@@ -20,12 +21,12 @@ public class ProgressComment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /*
+    
     // === XÓA BỎ LIÊN KẾT CŨ TỚI DAILYPROGRESS ===
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "daily_progress_id", nullable = false)
     private DailyProgress dailyProgress;
-    */
+    
 
     // === THÊM MỚI LIÊN KẾT TỚI CHECKINEVENT ===
     @ManyToOne(fetch = FetchType.LAZY)

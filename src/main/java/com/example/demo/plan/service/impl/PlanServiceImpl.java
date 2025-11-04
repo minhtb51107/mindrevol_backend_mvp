@@ -34,7 +34,14 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.example.demo.progress.repository.CheckInEventRepository;
+import com.example.demo.progress.repository.CheckInTaskRepository;
+import com.example.demo.feed.repository.FeedEventRepository; // <-- THÊM IMPORT NÀY
+import com.example.demo.community.repository.ProgressCommentRepository; // <-- THÊM IMPORT NÀY
+import com.example.demo.community.repository.ProgressReactionRepository;
+import com.example.demo.progress.repository.DailyProgressRepository; // <-- THÊM IMPORT NÀY
+import com.example.demo.progress.entity.DailyProgress; // <-- THÊM IMPORT NÀY
+import com.example.demo.progress.entity.checkin.CheckInEvent;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.function.Function;
@@ -56,8 +63,13 @@ public class PlanServiceImpl implements PlanService {
     private final TaskMapper taskMapper;
     private final SimpMessagingTemplate messagingTemplate;
     private final FeedService feedService;
-
-
+    private final CheckInEventRepository checkInEventRepository;
+    private final CheckInTaskRepository checkInTaskRepository;
+    private final FeedEventRepository feedEventRepository; // <-- THÊM REPO NÀY
+    private final ProgressCommentRepository progressCommentRepository;
+    private final DailyProgressRepository dailyProgressRepository;
+    private final ProgressReactionRepository progressReactionRepository;
+    
     @Override
     public PlanDetailResponse createPlan(CreatePlanRequest request, String creatorEmail) {
         User creator = findUserByEmail(creatorEmail);
@@ -359,9 +371,9 @@ public class PlanServiceImpl implements PlanService {
          // Query này KHÔNG bị ảnh hưởng bởi @Where vì nó truy vấn PlanMember
         List<PlanMember> planMembers = planMemberRepository.findByUserIdWithPlan(user.getId());
 
-        Stream<PlanMember> filteredStream = planMembers.stream()
+        Stream<PlanMember> filteredStream = planMembers.stream();
                 // THÊM BỘ LỌC: Lọc bỏ các plan đã ARCHIVED ở tầng service
-                .filter(pm -> pm.getPlan() != null && pm.getPlan().getStatus() != PlanStatus.ARCHIVED);
+                //.filter(pm -> pm.getPlan() != null && pm.getPlan().getStatus() != PlanStatus.ARCHIVED);
 
         // Lọc theo searchTerm nếu có
         if (searchTerm != null && !searchTerm.isBlank()) {
@@ -707,26 +719,72 @@ public class PlanServiceImpl implements PlanService {
     @Override
     @Transactional
     public void deletePlanPermanently(String shareableLink, String ownerEmail) {
-        // Bước 1: Tìm plan bất kể trạng thái (vượt qua @Where)
+        // 1. Lấy Plan và các liên kết
         Plan plan = findPlanRegardlessOfStatus(shareableLink);
         User owner = findUserByEmail(ownerEmail);
-
-        // Bước 2: Đảm bảo là chủ sở hữu
         ensureUserIsOwner(plan, owner.getId());
-
-        // Bước 3: (QUAN TRỌNG NHẤT) Đảm bảo plan ĐÃ được lưu trữ (ARCHIVED)
-        // Điều này thực hiện logic "an toàn 2 bước" của bạn
         if (plan.getStatus() != PlanStatus.ARCHIVED) {
-            throw new BadRequestException("Chỉ có thể xóa vĩnh viễn các kế hoạch đã được lưu trữ (Archived).");
+            throw new BadRequestException("...");
         }
 
-        // Bước 4: Thực hiện Hard Delete
-        // ON DELETE CASCADE sẽ xóa tất cả members, tasks, check-ins, comments... liên quan.
+        // --- BẮT ĐẦU DỌN DẸP TẤT CẢ LIÊN KẾT ---
+        
+        List<PlanMember> members = plan.getMembers();
+        List<Integer> memberIds = members.stream().map(PlanMember::getId).collect(Collectors.toList());
+        List<Task> tasks = plan.getDailyTasks();
+        List<Long> taskIds = tasks.stream().map(Task::getId).collect(Collectors.toList());
+
+        // 2. Dọn dẹp các liên kết trỏ đến Task (dùng query @Modifying)
+        if (!taskIds.isEmpty()) {
+            checkInTaskRepository.deleteAllByTaskIdIn(taskIds);
+            // (Bạn cũng cần thêm các hàm tương tự cho TaskComment và TaskAttachment nếu chúng có liên kết)
+            // taskCommentRepository.deleteAllByTaskIdIn(taskIds); 
+            // taskAttachmentRepository.deleteAllByTaskIdIn(taskIds);
+        }
+
+        // 3. Dọn dẹp liên kết TỚI Plan (FeedEvent)
+        feedEventRepository.deleteAllByPlanId(plan.getId());
+
+        // 4. Dọn dẹp liên kết TỚI PlanMember (CheckInEvent, DailyProgress)
+        if (!memberIds.isEmpty()) {
+            // 4a. Dọn dẹp CheckInEvent (vì nó trỏ đến PlanMember)
+            List<CheckInEvent> eventsToDelete = checkInEventRepository.findAllByPlanMemberIdIn(memberIds);
+            checkInEventRepository.deleteAllInBatch(eventsToDelete); // Dùng InBatch được vì PlanMember không có list trỏ ngược lại
+
+            // 4b. Dọn dẹp DailyProgress (và các con của nó)
+            List<DailyProgress> progressList = dailyProgressRepository.findAllByPlanMemberIdIn(memberIds);
+            if (progressList != null && !progressList.isEmpty()) {
+                List<Long> progressIds = progressList.stream().map(DailyProgress::getId).collect(Collectors.toList());
+                
+                // Xóa các cháu (ProgressComment, ProgressReaction)
+                progressCommentRepository.deleteAllByDailyProgressIdIn(progressIds);
+                progressReactionRepository.deleteAllByDailyProgressIdIn(progressIds); // (Cần tạo repo này)
+            }
+            
+            // 4c. (QUAN TRỌNG) Cắt đứt liên kết trong session
+            // Ta phải làm điều này *trước khi* xóa DailyProgress
+            for (PlanMember member : members) {
+                // Dùng getter từ file PlanMember.java
+                if (member.getDailyProgressList() != null) {
+                    member.getDailyProgressList().clear(); 
+                }
+            }
+            
+            // 4d. Bây giờ mới xóa DailyProgress
+            if (progressList != null && !progressList.isEmpty()) {
+                dailyProgressRepository.deleteAllInBatch(progressList);
+            }
+        }
+        
+        // 5. (QUAN TRỌNG) Cắt đứt liên kết của Plan
+        plan.getMembers().clear();
+        plan.getDailyTasks().clear();
+        // --- KẾT THÚC DỌN DẸP ---
+
+        // 6. Xóa Plan
         planRepository.delete(plan);
 
         log.info("User {} permanently deleted plan {} (ID: {})", ownerEmail, shareableLink, plan.getId());
-
-        // Không cần gửi WebSocket, vì plan đã biến mất vĩnh viễn.
     }
     // --- KẾT THÚC THÊM MỚI ---
 

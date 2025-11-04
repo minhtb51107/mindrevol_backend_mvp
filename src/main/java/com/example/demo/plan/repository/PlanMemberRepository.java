@@ -15,7 +15,9 @@ public interface PlanMemberRepository extends JpaRepository<PlanMember, Integer>
     // (Các phương thức cũ của bạn)
     Optional<PlanMember> findByPlanIdAndUserId(Integer planId, Integer userId);
 
-    @Query("SELECT pm FROM PlanMember pm JOIN FETCH pm.plan p WHERE pm.user.id = :userId AND p.status <> 'ARCHIVED'")
+ // File: src/main/java/com/example/demo/plan/repository/PlanMemberRepository.java
+
+    @Query("SELECT pm FROM PlanMember pm JOIN pm.plan p WHERE pm.user.id = :userId")
     List<PlanMember> findByUserIdWithPlan(@Param("userId") Integer userId);
     
     // --- THÊM 3 PHƯƠNG THỨC MỚI BÊN DƯỚI ---

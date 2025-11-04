@@ -57,5 +57,7 @@ public interface DailyProgressRepository extends JpaRepository<DailyProgress, Lo
            // "LEFT JOIN FETCH r.user ru " + // <-- ĐÃ XÓA
            "WHERE dp.id = :id")
     Optional<DailyProgress> findByIdWithDetails(@Param("id") Long id);
-
+    
+ // THÊM PHƯƠNG THỨC NÀY
+    List<DailyProgress> findAllByPlanMemberIdIn(List<Integer> memberIds);
 }
