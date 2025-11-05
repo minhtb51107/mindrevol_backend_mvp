@@ -1,5 +1,6 @@
 package com.example.demo.progress.repository;
 
+import com.example.demo.plan.entity.PlanMember;
 import com.example.demo.progress.entity.checkin.CheckInEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set; 
 
 @Repository
@@ -33,4 +35,8 @@ public interface CheckInEventRepository extends JpaRepository<CheckInEvent, Long
 
  // Thêm phương thức này
     List<CheckInEvent> findAllByPlanMemberIdIn(List<Integer> memberIds);
+    
+    boolean existsByPlanMemberAndCheckInTimestampAfter(PlanMember planMember, LocalDateTime timestamp);
+    
+    Optional<CheckInEvent> findFirstByPlanMemberOrderByCheckInTimestampDesc(PlanMember planMember);
 }

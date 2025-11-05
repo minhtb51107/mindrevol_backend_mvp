@@ -61,4 +61,6 @@ public interface PlanService {
     void deletePlanPermanently(String shareableLink, String ownerEmail);
     
     PlanDetailResponse createPlanWithSchedule(CreatePlanWithScheduleRequest request, String creatorEmail);
+    
+    void nudgeMember(String shareableLink, Integer targetUserId, String nudgerEmail);
 }

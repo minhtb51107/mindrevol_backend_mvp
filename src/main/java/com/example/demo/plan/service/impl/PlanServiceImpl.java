@@ -210,6 +210,38 @@ public class PlanServiceImpl implements PlanService {
 
         return planMapper.toPlanDetailResponse(savedPlan);
     }
+    
+    @Override
+    public void nudgeMember(String shareableLink, Integer targetUserId, String nudgerEmail) {
+        Plan plan = findPlanByShareableLink(shareableLink); // Chỉ thúc giục trong plan ACTIVE
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+             throw new BadRequestException("Chỉ có thể thúc giục thành viên trong kế hoạch đang hoạt động.");
+        }
+        
+        User nudger = findUserByEmail(nudgerEmail);
+
+        // Không thể tự thúc giục chính mình
+        if (nudger.getId().equals(targetUserId)) {
+            throw new BadRequestException("Bạn không thể tự thúc giục chính mình! Hãy tự giác nhé ^^");
+        }
+
+        // Tìm thành viên mục tiêu trong plan
+        PlanMember targetMember = plan.getMembers().stream()
+                .filter(m -> m.getUser().getId().equals(targetUserId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Thành viên mục tiêu không tồn tại trong kế hoạch này."));
+
+        // Gửi thông báo (Giả định bạn đã có hàm createNotification hoặc tương tự trong NotificationService)
+        // Bạn cần điều chỉnh tên hàm dưới đây cho khớp với NotificationService của bạn
+        String title = "🔔 Lời nhắc từ đồng đội";
+        String message = String.format("%s vừa thúc giục bạn trong kế hoạch '%s'. Cố lên nào!",
+                getUserFullName(nudger), plan.getTitle());
+        String link = "/plan/" + shareableLink; // Link để user click vào xem plan
+
+        // VÍ DỤ GỌI HAM - HÃY SỬA LẠI CHO ĐÚNG VỚI SERVICE CỦA BẠN
+        // notificationService.send(targetMember.getUser(), title, message, link);
+        log.info("Nudge sent from {} to user ID {} in plan {}", nudgerEmail, targetUserId, shareableLink);
+    }
 
     @Override
     public PlanDetailResponse joinPlan(String shareableLink, String userEmail) {

@@ -1,6 +1,8 @@
 package com.example.demo.plan.repository;
 
 import com.example.demo.plan.entity.Plan;
+import com.example.demo.plan.entity.PlanStatus;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -8,6 +10,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -20,4 +23,6 @@ public interface PlanRepository extends JpaRepository<Plan, Integer> {
     // Phương thức này "vượt rào" @Where, tìm plan bất kể trạng thái
     @Query("SELECT p FROM Plan p WHERE p.shareableLink = :shareableLink")
     Optional<Plan> findRegardlessOfStatusByShareableLink(@Param("shareableLink") String shareableLink);
+
+	List<Plan> findByStatus(PlanStatus active);
 }

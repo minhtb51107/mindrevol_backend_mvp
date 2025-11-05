@@ -249,4 +249,16 @@ public class PlanController {
         List<TaskResponse> responses = planService.reorderTasksInPlan(shareableLink, request, email);
         return ResponseEntity.ok(responses);
     }
+    
+    @PostMapping("/{shareableLink}/nudge/{userId}")
+    @PreAuthorize("@planSecurity.isMember(#shareableLink, authentication.name)")
+    public ResponseEntity<Void> nudgeMember(
+            @PathVariable String shareableLink,
+            @PathVariable Integer userId,
+            Authentication authentication
+    ) {
+        String email = authentication.getName();
+        planService.nudgeMember(shareableLink, userId, email);
+        return ResponseEntity.ok().build();
+    }
 }
