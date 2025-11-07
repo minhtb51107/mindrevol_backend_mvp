@@ -1,17 +1,17 @@
 package com.example.demo.plan.dto.request;
 
 import java.time.LocalDate;
-import java.time.LocalTime; // Thêm import LocalTime
+import java.time.LocalTime;
 import java.util.List;
 import java.util.ArrayList;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
-import jakarta.validation.Valid; // Thêm import Valid
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size; // Thêm import Size
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -24,6 +24,10 @@ public class CreatePlanRequest {
 
     private String description;
 
+    // --- THÊM TRƯỜNG MỚI ---
+    private String motivation;
+    // ------------------------
+
     @NotNull(message = "Thời lượng không được để trống")
     @Min(value = 1, message = "Thời lượng phải ít nhất là 1 ngày")
     private Integer durationInDays;
@@ -34,22 +38,19 @@ public class CreatePlanRequest {
 
     private String dailyGoal;
 
-    @Valid // Thêm Valid để kiểm tra các TaskRequest bên trong
+    @Valid
     private List<TaskRequest> dailyTasks = new ArrayList<>();
     
-    private boolean repeatTasks; // <-- THÊM TRƯỜNG NÀY
+    private boolean repeatTasks;
 
-    // --- THÊM INNER CLASS TaskRequest ---
     @Getter
     @Setter
     public static class TaskRequest {
         @NotBlank(message = "Mô tả công việc không được để trống")
-        @Size(max = 1000, message = "Mô tả công việc quá dài") // Giới hạn độ dài nếu cần
+        @Size(max = 1000, message = "Mô tả công việc quá dài")
         private String description;
 
-        // Format HH:mm (ví dụ: "17:30") khi gửi từ frontend
         @JsonFormat(pattern = "HH:mm")
-        private LocalTime deadlineTime; // Nullable
+        private LocalTime deadlineTime;
     }
-    // --- KẾT THÚC THÊM ---
 }

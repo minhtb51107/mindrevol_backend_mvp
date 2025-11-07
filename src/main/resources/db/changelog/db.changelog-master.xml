@@ -12,5 +12,6 @@
     <include file="changes/005-add-auth-provider-to-users.xml" relativeToChangelogFile="true"/>
     <include file="changes/006-alter-checkin-task-fk.xml" relativeToChangelogFile="true"/>
     <include file="changes/007-alter-checkin-task-nullable.xml" relativeToChangelogFile="true"/>
+    <include file="changes/008-add-motivation-to-plans.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

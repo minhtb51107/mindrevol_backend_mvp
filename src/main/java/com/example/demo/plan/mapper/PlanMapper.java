@@ -3,11 +3,11 @@ package com.example.demo.plan.mapper;
 import com.example.demo.plan.dto.response.PlanDetailResponse;
 import com.example.demo.plan.dto.response.PlanPublicResponse;
 import com.example.demo.plan.dto.response.PlanSummaryResponse;
-import com.example.demo.plan.dto.response.TaskResponse; // Thêm import TaskResponse
+import com.example.demo.plan.dto.response.TaskResponse;
 import com.example.demo.plan.entity.Plan;
 import com.example.demo.plan.entity.PlanMember;
 import com.example.demo.plan.entity.PlanStatus;
-import com.example.demo.plan.entity.Task; // Thêm import Task
+import com.example.demo.plan.entity.Task;
 import com.example.demo.user.entity.Customer;
 import com.example.demo.user.entity.Employee;
 import com.example.demo.user.entity.User;
@@ -22,7 +22,7 @@ import java.util.Collections;
 import java.util.stream.Collectors;
 
 @Component
-@RequiredArgsConstructor // Thêm annotation này
+@RequiredArgsConstructor
 public class PlanMapper {
 
 	private final TaskMapper taskMapper;
@@ -38,6 +38,9 @@ public class PlanMapper {
                 .id(plan.getId())
                 .title(plan.getTitle())
                 .description(plan.getDescription())
+                // --- THÊM MAPPING MỚI ---
+                .motivation(plan.getMotivation())
+                // ------------------------
                 .durationInDays(plan.getDurationInDays())
                 .dailyGoal(plan.getDailyGoal())
                 .shareableLink(plan.getShareableLink())
@@ -52,7 +55,7 @@ public class PlanMapper {
                             .collect(Collectors.toList()))
                 .dailyTasks(plan.getDailyTasks() == null ? Collections.emptyList() :
                             plan.getDailyTasks().stream()
-                                .map(this::toTaskResponse) // Gọi hàm map mới
+                                .map(this::toTaskResponse)
                                 .collect(Collectors.toList()))
                 .build();
     }
@@ -102,16 +105,15 @@ public class PlanMapper {
 
     public PlanDetailResponse.PlanMemberResponse toPlanMemberResponse(PlanMember member) {
         if (member == null) return null;
-        User user = member.getUser(); // Lấy user ra 1 lần
+        User user = member.getUser();
         return PlanDetailResponse.PlanMemberResponse.builder()
-                .userId(user != null ? user.getId() : null) // *** THÊM MAPPING userId ***
+                .userId(user != null ? user.getId() : null)
                 .userEmail(user != null ? user.getEmail() : "N/A")
                 .userFullName(getUserFullName(user))
                 .role(member.getRole() != null ? member.getRole().name() : "N/A")
                 .build();
     }
 
- // SỬA HÀM NÀY
     private TaskResponse toTaskResponse(Task task) {
         if (task == null) return null;
         return TaskResponse.builder()
@@ -119,16 +121,14 @@ public class PlanMapper {
                 .description(task.getDescription())
                 .order(task.getOrder())
                 .deadlineTime(task.getDeadlineTime())
-                // THÊM PHẦN MAPPING COMMENTS VÀ ATTACHMENTS
                 .comments(task.getComments() == null ? Collections.emptyList() :
                           task.getComments().stream()
-                              .map(taskMapper::toTaskCommentResponse) // Sử dụng TaskMapper
+                              .map(taskMapper::toTaskCommentResponse)
                               .collect(Collectors.toList()))
                 .attachments(task.getAttachments() == null ? Collections.emptyList() :
                              task.getAttachments().stream()
-                                 .map(taskMapper::toTaskAttachmentResponse) // Sử dụng TaskMapper
+                                 .map(taskMapper::toTaskAttachmentResponse)
                                  .collect(Collectors.toList()))
-                // KẾT THÚC THÊM
                 .build();
     }
 

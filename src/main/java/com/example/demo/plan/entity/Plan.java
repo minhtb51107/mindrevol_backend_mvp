@@ -3,7 +3,6 @@ package com.example.demo.plan.entity;
 import com.example.demo.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
-// THÊM IMPORT NÀY
 import org.hibernate.annotations.Where;
 
 import java.time.LocalDate;
@@ -19,7 +18,7 @@ import java.util.UUID;
 @Builder
 @Entity
 @Table(name = "plans")
-//@Where(clause = "status <> 'ARCHIVED'") // <-- THÊM DÒNG NÀY
+//@Where(clause = "status <> 'ARCHIVED'")
 public class Plan {
 
     @Id
@@ -31,6 +30,11 @@ public class Plan {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    // --- THÊM TRƯỜNG MỚI ---
+    @Column(name = "motivation", columnDefinition = "TEXT")
+    private String motivation;
+    // ------------------------
 
     @Column(nullable = false)
     private int durationInDays;
@@ -46,8 +50,8 @@ public class Plan {
     private User creator;
 
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default // Giữ lại Builder.Default
-    private List<PlanMember> members = new ArrayList<>(); // Khởi tạo members
+    @Builder.Default
+    private List<PlanMember> members = new ArrayList<>();
 
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
@@ -62,15 +66,10 @@ public class Plan {
     @Column(nullable = false, length = 20)
     private PlanStatus status = PlanStatus.ACTIVE;
 
-    // --- THAY ĐỔI Ở ĐÂY ---
-    // Bỏ @ElementCollection và @CollectionTable
-    // Thay List<String> bằng List<Task>
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @OrderBy("order ASC") // Sắp xếp task theo thứ tự 'order'
+    @OrderBy("order ASC")
     @Builder.Default
-    private List<Task> dailyTasks = new ArrayList<>(); // Đổi tên biến nếu muốn, ví dụ tasks
-    // --- KẾT THÚC THAY ĐỔI ---
-
+    private List<Task> dailyTasks = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {
@@ -79,15 +78,13 @@ public class Plan {
         }
     }
 
-    // --- THÊM PHƯƠNG THỨC TIỆN ÍCH (OPTIONAL) ---
     public void addTask(Task task) {
         dailyTasks.add(task);
-        task.setPlan(this); // Thiết lập quan hệ 2 chiều
+        task.setPlan(this);
     }
 
     public void removeTask(Task task) {
         dailyTasks.remove(task);
         task.setPlan(null);
     }
-    // --- KẾT THÚC THÊM ---
 }

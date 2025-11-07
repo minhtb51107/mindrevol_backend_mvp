@@ -11,12 +11,17 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class UpdatePlanDetailsRequest {
 
-    @NotBlank(message = "Tên kế hoạch không được để trống")
-    @Size(max = 100, message = "Tên kế hoạch quá dài (tối đa 100 ký tự)")
+    @NotBlank(message = "Tên hành trình không được để trống")
+    @Size(max = 100, message = "Tên hành trình quá dài (tối đa 100 ký tự)")
     private String title;
 
     @Size(max = 500, message = "Mô tả quá dài (tối đa 500 ký tự)")
     private String description;
+
+    // --- THÊM TRƯỜNG NÀY ---
+    @Size(max = 1000, message = "Động lực quá dài (tối đa 1000 ký tự)")
+    private String motivation;
+    // ------------------------
 
     @Size(max = 100, message = "Mục tiêu hàng ngày quá dài (tối đa 100 ký tự)")
     private String dailyGoal;

@@ -24,6 +24,8 @@ public class CreatePlanWithScheduleRequest {
     private String dailyGoal;
     @NotNull @FutureOrPresent
     private LocalDate startDate;
+    
+    private String motivation;
 
     // 2. Danh sách task đã được gán ngày cụ thể
     @Valid

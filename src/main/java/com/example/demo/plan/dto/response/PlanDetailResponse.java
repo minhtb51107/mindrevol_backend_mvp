@@ -17,6 +17,9 @@ public class PlanDetailResponse {
     private Integer id;
     private String title;
     private String description;
+    // --- THÊM TRƯỜNG MỚI ---
+    private String motivation;
+    // ------------------------
     private int durationInDays;
     private String dailyGoal;
     private String shareableLink;
@@ -27,17 +30,14 @@ public class PlanDetailResponse {
     private OffsetDateTime createdAt;
     private List<PlanMemberResponse> members;
 
-    // --- THAY ĐỔI Ở ĐÂY ---
-    // Thay List<String> bằng List<TaskResponse>
     @Builder.Default
     private List<TaskResponse> dailyTasks = new ArrayList<>();
-    // --- KẾT THÚC THAY ĐỔI ---
 
     @Getter
     @Setter
     @Builder
     public static class PlanMemberResponse {
-    	private Integer userId; // *** THÊM TRƯỜNG NÀY ***
+    	private Integer userId;
         private String userEmail;
         private String userFullName;
         private String role;

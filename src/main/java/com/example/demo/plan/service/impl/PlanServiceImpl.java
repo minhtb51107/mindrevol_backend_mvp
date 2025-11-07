@@ -85,6 +85,7 @@ public class PlanServiceImpl implements PlanService {
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .durationInDays(request.getDurationInDays())
+                .motivation(request.getMotivation())
                 .dailyGoal(request.getDailyGoal())
                 .startDate(request.getStartDate())
                 .creator(creator)
@@ -163,6 +164,7 @@ public class PlanServiceImpl implements PlanService {
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .durationInDays(request.getDurationInDays())
+                .motivation(request.getMotivation())
                 .dailyGoal(request.getDailyGoal())
                 .startDate(request.getStartDate())
                 .creator(creator)
@@ -412,6 +414,7 @@ public class PlanServiceImpl implements PlanService {
 
         plan.setTitle(request.getTitle());
         plan.setDescription(request.getDescription());
+        plan.setMotivation(request.getMotivation()); // <-- THÊM DÒNG NÀY
         plan.setDailyGoal(request.getDailyGoal());
 
         Plan savedPlan = planRepository.save(plan);
