@@ -13,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.Set;
 
 // --- CÁC IMPORT MỚI ---
 import com.example.demo.progress.dto.request.UpdateCheckInRequest;
@@ -53,6 +54,15 @@ public class ProgressController {
             Authentication authentication) {
         String userEmail = authentication.getName();
         return ResponseEntity.ok(progressService.getDailyTimeline(shareableLink, userEmail, date));
+    }
+    
+    @GetMapping("/check-in/today")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Set<Long>> getCompletedTaskIdsToday(
+            @PathVariable String shareableLink,
+            Authentication authentication) {
+        String userEmail = authentication.getName();
+        return ResponseEntity.ok(progressService.getCompletedTaskIdsToday(shareableLink, userEmail));
     }
 
     @PutMapping("/check-in/{checkInEventId}")

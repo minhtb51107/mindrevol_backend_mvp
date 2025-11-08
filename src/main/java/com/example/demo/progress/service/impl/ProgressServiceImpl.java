@@ -182,6 +182,27 @@ public class ProgressServiceImpl implements ProgressService {
         
         return response;
     }
+    
+ // (Thêm vào ProgressServiceImpl.java)
+    @Override
+    @Transactional(readOnly = true)
+    public Set<Long> getCompletedTaskIdsToday(String shareableLink, String userEmail) {
+        Plan plan = findPlanByShareableLink(shareableLink);
+        User user = findUserByEmail(userEmail);
+        PlanMember member = findMemberByUserAndPlan(user, plan);
+
+        LocalDateTime now = LocalDateTime.now(VIETNAM_ZONE);
+        LocalDateTime startOfDay = now.toLocalDate().atStartOfDay();
+        LocalDateTime endOfDay = now.toLocalDate().atTime(LocalTime.MAX);
+
+        List<CheckInEvent> todaysEvents = checkInEventRepository.findByPlanMemberIdAndCheckInTimestampBetween(
+                member.getId(), startOfDay, endOfDay);
+
+        return todaysEvents.stream()
+                .flatMap(event -> event.getCompletedTasks().stream())
+                .map(checkInTask -> checkInTask.getTask().getId())
+                .collect(Collectors.toSet());
+    }
 
     // --- HÀM getDailyTimeline (Giữ nguyên) ---
     @Override

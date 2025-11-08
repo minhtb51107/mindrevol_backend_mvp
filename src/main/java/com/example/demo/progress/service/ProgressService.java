@@ -18,6 +18,7 @@ import com.example.demo.community.dto.response.CommentResponse;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 public interface ProgressService {
 
@@ -53,4 +54,5 @@ public interface ProgressService {
      * Thêm/xóa (toggle) một reaction trên một CheckInEvent.
      */
     void toggleReactionOnCheckIn(Long checkInEventId, AddReactionRequest request, String userEmail);
+	Set<Long> getCompletedTaskIdsToday(String shareableLink, String userEmail);
 }
