@@ -94,6 +94,30 @@ public class ProgressServiceImpl implements ProgressService {
         
         LocalDateTime now = LocalDateTime.now(VIETNAM_ZONE);
         
+     // === [BẮT ĐẦU ĐOẠN CODE THÊM MỚI] ===
+        // 1. Lấy tất cả các task đã check-in hôm nay của member này
+        LocalDateTime startOfDay = now.toLocalDate().atStartOfDay();
+        LocalDateTime endOfDay = now.toLocalDate().atTime(LocalTime.MAX);
+        
+        // Lưu ý: Bạn cần đảm bảo repository có phương thức này hoặc tương tự
+        List<CheckInEvent> todaysEvents = checkInEventRepository.findByPlanMemberIdAndCheckInTimestampBetween(
+                member.getId(), startOfDay, endOfDay);
+
+        Set<Long> completedTaskIdsToday = todaysEvents.stream()
+                .flatMap(event -> event.getCompletedTasks().stream())
+                .map(checkInTask -> checkInTask.getTask().getId())
+                .collect(Collectors.toSet());
+
+        // 2. Kiểm tra xem có task nào trong request trùng với task đã hoàn thành không
+        if (request.getCompletedTaskIds() != null) {
+            for (Long requestingTaskId : request.getCompletedTaskIds()) {
+                if (completedTaskIdsToday.contains(requestingTaskId)) {
+                    throw new BadRequestException("Công việc (ID: " + requestingTaskId + ") đã được bạn check-in hôm nay rồi!");
+                }
+            }
+        }
+        // === [KẾT THÚC ĐOẠN CODE THÊM MỚI] ===
+        
         CheckInEvent checkInEvent = CheckInEvent.builder()
                 .planMember(member)
                 .checkInTimestamp(now)

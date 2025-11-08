@@ -39,4 +39,7 @@ public interface CheckInEventRepository extends JpaRepository<CheckInEvent, Long
     boolean existsByPlanMemberAndCheckInTimestampAfter(PlanMember planMember, LocalDateTime timestamp);
     
     Optional<CheckInEvent> findFirstByPlanMemberOrderByCheckInTimestampDesc(PlanMember planMember);
+
+	List<CheckInEvent> findByPlanMemberIdAndCheckInTimestampBetween(Integer id, LocalDateTime startOfDay,
+			LocalDateTime endOfDay);
 }
