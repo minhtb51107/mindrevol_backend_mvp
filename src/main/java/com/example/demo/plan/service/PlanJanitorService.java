@@ -16,6 +16,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +34,67 @@ public class PlanJanitorService {
     private final CheckInEventRepository checkInEventRepository;
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
+
+    // --- BỔ SUNG START: Job tự động kết thúc kế hoạch ---
+    /**
+     * Scheduled Job: Chạy vào 0:30 AM mỗi ngày.
+     * Nhiệm vụ: Kiểm tra các kế hoạch ACTIVE đã quá hạn (ngày kết thúc < hôm nay) và chuyển sang COMPLETED.
+     */
+    @Scheduled(cron = "0 30 0 * * ?")
+    @Transactional
+    public void autoCompleteExpiredPlans() {
+        log.info("Bắt đầu Job kiểm tra và kết thúc các kế hoạch đã quá hạn...");
+        LocalDate today = LocalDate.now();
+
+        // 1. Lấy tất cả các kế hoạch đang ACTIVE
+        List<Plan> activePlans = planRepository.findByStatus(PlanStatus.ACTIVE);
+        int completedCount = 0;
+
+        for (Plan plan : activePlans) {
+            // Tính ngày kết thúc: startDate + duration - 1
+            LocalDate endDate = plan.getStartDate().plusDays(plan.getDurationInDays() - 1);
+
+            // Nếu ngày kết thúc nhỏ hơn ngày hiện tại -> Đã quá hạn
+            if (endDate.isBefore(today)) {
+                plan.setStatus(PlanStatus.COMPLETED);
+                // Plan được lưu tự động nhờ @Transactional khi kết thúc method,
+                // hoặc có thể gọi explicit: planRepository.save(plan);
+                completedCount++;
+                log.info("-> Kế hoạch '{}' (ID: {}) đã hết hạn vào ngày {}. Chuyển trạng thái sang COMPLETED.",
+                        plan.getTitle(), plan.getId(), endDate);
+
+                // Gửi thông báo và WebSocket cập nhật cho các thành viên
+                notifyPlanCompletion(plan);
+            }
+        }
+
+        log.info("Kết thúc Job. Đã tự động hoàn thành {} kế hoạch.", completedCount);
+    }
+
+    private void notifyPlanCompletion(Plan plan) {
+        // 1. Gửi Notification cho tất cả thành viên
+        for (PlanMember member : plan.getMembers()) {
+            // Tùy chọn: Có thể chỉ gửi cho Owner nếu muốn ít thông báo hơn,
+            // nhưng thường thì nên gửi cho tất cả để họ biết hành trình đã kết thúc.
+             String title = "Hành trình đã kết thúc!";
+             String message = String.format("Chúc mừng! Kế hoạch '%s' đã chính thức hoàn thành. Hãy cùng nhìn lại chặng đường vừa qua nhé.", plan.getTitle());
+             // Link dẫn đến trang chi tiết kế hoạch (có thể thêm param ?tab=summary nếu sau này làm tab tổng kết)
+             String link = "/plan/" + plan.getShareableLink();
+             
+             // Giả định method createNotification có sẵn
+             notificationService.createNotification(member.getUser(), message, link);
+        }
+
+        // 2. Gửi WebSocket để frontend cập nhật trạng thái ngay lập tức (nếu ai đó đang treo máy xem plan lúc 0:30 sáng)
+        String destination = "/topic/plan/" + plan.getShareableLink() + "/details";
+        Map<String, Object> payload = Map.of(
+                "type", "PLAN_COMPLETED",
+                "planId", plan.getId(),
+                "status", "COMPLETED"
+        );
+        messagingTemplate.convertAndSend(destination, payload);
+    }
+    // --- BỔ SUNG END ---
 
     /**
      * Scheduled Job: Chạy vào 3:00 AM mỗi ngày.
@@ -90,8 +152,7 @@ public class PlanJanitorService {
                 plan.getTitle(), INACTIVITY_DAYS_LIMIT);
         
         // Giả định NotificationService có phương thức này. Bạn cần điều chỉnh nếu tên hàm khác.
-        // notificationService.createNotification(user, title, message, "/"); 
-        // Nếu chưa có, bạn có thể tạm comment lại hoặc log ra console.
+        notificationService.createNotification(user, message, "/");
         log.info("[NOTIFICATION] To {}: {}", user.getEmail(), message);
     }
 

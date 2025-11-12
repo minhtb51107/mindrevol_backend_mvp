@@ -17,27 +17,23 @@ import lombok.*;
 )
 public class ProgressReaction {
 
-    @Id
+	@Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-   
-    // === XÓA BỎ LIÊN KẾT CŨ TỚI DAILYPROGRESS ===
+    // === SỬA: Cho phép null để tương thích ngược trong quá trình chuyển đổi ===
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "daily_progress_id", nullable = false)
+    @JoinColumn(name = "daily_progress_id", nullable = true) // <-- SỬA THÀNH true
     private DailyProgress dailyProgress;
     
-    
-    // === THÊM MỚI LIÊN KẾT TỚI CHECKINEVENT ===
+    // === SỬA: Bắt buộc phải có CheckInEvent cho các reaction mới ===
     @ManyToOne(fetch = FetchType.LAZY)
-    // Sửa ở đây: Bỏ "nullable = false"
-    @JoinColumn(name = "check_in_event_id") 
+    @JoinColumn(name = "check_in_event_id", nullable = false) // <-- SỬA THÀNH false
     private CheckInEvent checkInEvent;
-    // === KẾT THÚC THÊM MỚI ===
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    private User user; // Người thả reaction
+    private User user;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

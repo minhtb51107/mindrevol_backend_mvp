@@ -64,6 +64,10 @@ public class TaskServiceImpl implements TaskService {
         User author = findUserByEmail(userEmail);
         ensureUserIsMemberOfPlan(author, task.getPlan());
         Plan plan = task.getPlan();
+        
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+            throw new AccessDeniedException("Không thể bình luận vì kế hoạch đã kết thúc hoặc bị lưu trữ.");
+        }
 
         TaskComment comment = TaskComment.builder()
                 .task(task)
@@ -115,6 +119,12 @@ public class TaskServiceImpl implements TaskService {
     public TaskCommentResponse updateTaskComment(Long commentId, UpdateTaskCommentRequest request, String userEmail) {
         TaskComment comment = findTaskCommentByIdWithTaskAndPlan(commentId);
         User user = findUserByEmail(userEmail);
+        Task task = comment.getTask();      // Cần lấy task để lấy plan
+        Plan plan = task.getPlan();         // Lấy plan
+        
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+            throw new AccessDeniedException("Không thể chỉnh sửa bình luận vì kế hoạch đã kết thúc.");
+        }
 
         if (!comment.getAuthor().getId().equals(user.getId())) {
             throw new AccessDeniedException("Bạn không có quyền sửa bình luận này.");
@@ -126,8 +136,6 @@ public class TaskServiceImpl implements TaskService {
         log.info("User {} updated task comment {}", userEmail, commentId);
 
         // --- XỬ LÝ NOTIFICATION CHO MENTION KHI UPDATE ---
-        Task task = comment.getTask();
-        Plan plan = task.getPlan();
         String authorName = getUserFullName(user);
         Set<Integer> oldMentionedIds = extractMentionedUserIds(oldContent);
         Set<Integer> newMentionedIds = extractMentionedUserIds(updatedComment.getContent());
@@ -168,6 +176,10 @@ public class TaskServiceImpl implements TaskService {
 
         boolean isAuthor = comment.getAuthor().getId().equals(user.getId());
         boolean isPlanOwner = isUserPlanOwner(user, plan);
+        
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+            throw new AccessDeniedException("Không thể xóa bình luận vì kế hoạch đã kết thúc.");
+        }
 
         if (!isAuthor && !isPlanOwner) {
             throw new AccessDeniedException("Bạn không có quyền xóa bình luận này.");
@@ -192,6 +204,14 @@ public class TaskServiceImpl implements TaskService {
         Task task = findTaskByIdWithPlan(taskId);
         User uploader = findUserByEmail(userEmail);
         ensureUserIsMemberOfPlan(uploader, task.getPlan());
+        
+        Plan plan = task.getPlan(); // Lấy plan
+
+        // --- BỔ SUNG START: Chặn upload file nếu Plan không ACTIVE ---
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+             throw new AccessDeniedException("Không thể tải lên tệp vì kế hoạch đã kết thúc.");
+        }
+        // --- BỔ SUNG END ---
 
         TaskAttachment attachment = TaskAttachment.builder()
                 .task(task)
@@ -228,6 +248,10 @@ public class TaskServiceImpl implements TaskService {
         Plan plan = task.getPlan();
         Long taskId = task.getId();
         String storedFilename = attachment.getStoredFilename();
+        
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+            throw new AccessDeniedException("Không thể xóa tệp vì kế hoạch đã kết thúc.");
+       }
 
         if (!isUserPlanOwner(user, plan)) {
             throw new AccessDeniedException("Chỉ chủ sở hữu kế hoạch mới có quyền xóa file đính kèm.");
