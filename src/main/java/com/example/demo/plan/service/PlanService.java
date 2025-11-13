@@ -1,5 +1,6 @@
 package com.example.demo.plan.service;
 
+import com.example.demo.plan.dto.request.CreateJourneyRequest;
 import com.example.demo.plan.dto.request.CreatePlanRequest;
 import com.example.demo.plan.dto.request.CreatePlanWithScheduleRequest;
 import com.example.demo.plan.dto.request.ManageTaskRequest;
@@ -7,6 +8,7 @@ import com.example.demo.plan.dto.request.ReorderTasksRequest;
 import com.example.demo.plan.dto.request.TransferOwnershipRequest;
 import com.example.demo.plan.dto.request.UpdatePlanDetailsRequest;
 import com.example.demo.plan.dto.request.UpdatePlanRequest;
+import com.example.demo.plan.dto.response.JourneySummaryResponse;
 import com.example.demo.plan.dto.response.PlanDetailResponse;
 import com.example.demo.plan.dto.response.PlanSummaryResponse;
 import com.example.demo.plan.dto.response.TaskResponse;
@@ -63,4 +65,6 @@ public interface PlanService {
     PlanDetailResponse createPlanWithSchedule(CreatePlanWithScheduleRequest request, String creatorEmail);
     
     void nudgeMember(String shareableLink, Integer targetUserId, String nudgerEmail);
+    
+    JourneySummaryResponse createJourney(CreateJourneyRequest request);
 }

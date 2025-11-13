@@ -26,6 +26,12 @@ public class User {
 
     @Column(name = "password", nullable = false, length = 255)
     private String password;
+    
+    @Column(name = "fullname", nullable = false, length = 100)
+    private String fullname;
+    
+    @Column(name = "photo", length = 255)
+    private String photo;
 
     @Builder.Default 
     @Enumerated(EnumType.STRING)

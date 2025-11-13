@@ -2,6 +2,7 @@ package com.example.demo.plan.service.impl;
 
 import com.example.demo.feed.entity.FeedEventType;
 import com.example.demo.feed.service.FeedService;
+import com.example.demo.plan.dto.request.CreateJourneyRequest;
 import com.example.demo.plan.dto.request.CreatePlanRequest;
 import com.example.demo.plan.dto.request.CreatePlanWithScheduleRequest;
 import com.example.demo.plan.dto.request.ManageTaskRequest;
@@ -10,6 +11,7 @@ import com.example.demo.plan.dto.request.TransferOwnershipRequest;
 // THÊM IMPORT NÀY
 import com.example.demo.plan.dto.request.UpdatePlanDetailsRequest;
 import com.example.demo.plan.dto.request.UpdatePlanRequest;
+import com.example.demo.plan.dto.response.JourneySummaryResponse;
 import com.example.demo.plan.dto.response.PlanDetailResponse;
 import com.example.demo.plan.dto.response.PlanPublicResponse;
 import com.example.demo.plan.dto.response.PlanSummaryResponse;
@@ -27,12 +29,16 @@ import com.example.demo.plan.repository.TaskRepository;
 import com.example.demo.plan.service.PlanService;
 import com.example.demo.shared.exception.BadRequestException;
 import com.example.demo.shared.exception.ResourceNotFoundException;
+import com.example.demo.user.entity.Friendship;
 import com.example.demo.user.entity.User;
+import com.example.demo.user.repository.FriendshipRepository;
 import com.example.demo.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.demo.progress.repository.CheckInEventRepository;
@@ -70,6 +76,65 @@ public class PlanServiceImpl implements PlanService {
     private final ProgressCommentRepository progressCommentRepository;
     private final DailyProgressRepository dailyProgressRepository;
     private final ProgressReactionRepository progressReactionRepository;
+    private final FriendshipRepository friendshipRepository;
+    
+    @Override
+    public JourneySummaryResponse createJourney(CreateJourneyRequest request) {
+        User creator = getCurrentUser(); // <-- Đã sửa (không dùng planSecurity)
+
+        // 1. Tạo và lưu Plan (Journey)
+        Plan journey = new Plan();
+        journey.setTitle(request.getTitle());
+        journey.setDescription(request.getDescription());
+        journey.setMotivation(request.getMotivation()); // Dùng trường motivation
+        journey.setCreator(creator);
+        journey.setStatus(PlanStatus.ACTIVE); // Kích hoạt luôn
+        journey.setShareableLink(UUID.randomUUID().toString());
+        
+        // Đặt giá trị mặc định cho các trường "cũ"
+        journey.setStartDate(LocalDate.now());
+        journey.setDurationInDays(30); // Tạm set 30 ngày
+        journey.setDailyGoal("Nỗ lực mỗi ngày"); // Bỏ qua dailyGoal từ request
+
+        Plan savedJourney = planRepository.save(journey);
+
+        // 2. Thêm người tạo làm OWNER
+        PlanMember ownerMember = PlanMember.builder()
+                .plan(savedJourney)
+                .user(creator)
+                .role(MemberRole.OWNER)
+                .build();
+        planMemberRepository.save(ownerMember);
+
+        // 3. Thêm bạn bè làm MEMBER (Từ Phần 1)
+        if (request.getFriendIds() != null && !request.getFriendIds().isEmpty()) {
+            
+            List<Friendship> friendships = friendshipRepository.findAllAcceptedFriendships(creator);
+            Set<Long> acceptedFriendIds = new HashSet<>();
+            friendships.forEach(f -> {
+                acceptedFriendIds.add(f.getRequester().equals(creator) ? f.getReceiver().getId() : f.getRequester().getId().longValue());
+            });
+
+            List<User> friendsToInvite = userRepository.findAllById(request.getFriendIds()).stream()
+                    .filter(friend -> acceptedFriendIds.contains(friend.getId())) 
+                    .toList();
+
+            List<PlanMember> membersToSave = friendsToInvite.stream()
+                    .map(friendUser -> PlanMember.builder()
+                            .plan(savedJourney)
+                            .user(friendUser)
+                            .role(MemberRole.MEMBER)
+                            .build())
+                    .toList();
+            
+            planMemberRepository.saveAll(membersToSave);
+        }
+
+        return JourneySummaryResponse.builder()
+                .shareableLink(savedJourney.getShareableLink())
+                .title(savedJourney.getTitle())
+                .build();
+    }
     
     @Override
     public PlanDetailResponse createPlan(CreatePlanRequest request, String creatorEmail) {
@@ -905,6 +970,16 @@ public class PlanServiceImpl implements PlanService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy kế hoạch với link: " + link));
     }
 
+    private User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new ResourceNotFoundException("No authenticated user found");
+        }
+        String email = authentication.getName();
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+    }
+    
     // --- THÊM HELPER MỚI ---
     // Helper này "VƯỢT RÀO" @Where, dùng cho các hàm quản trị
     private Plan findPlanRegardlessOfStatus(String link) {

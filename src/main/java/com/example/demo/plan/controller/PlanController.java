@@ -13,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import com.example.demo.plan.dto.request.CreateJourneyRequest;
+import com.example.demo.plan.dto.response.JourneySummaryResponse;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -24,6 +26,13 @@ import java.util.Map;
 public class PlanController {
 
     private final PlanService planService;
+    
+    @PostMapping("/journeys")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<JourneySummaryResponse> createJourney(@Valid @RequestBody CreateJourneyRequest request) {
+        JourneySummaryResponse response = planService.createJourney(request);
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
 
     // Endpoint này dùng cho "Tạo Nhanh"
     @PostMapping

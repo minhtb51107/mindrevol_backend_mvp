@@ -84,7 +84,7 @@ public class SecurityConfig {
                         "/api/v1/plans/{shareableLink}/public"
                         
                 ).permitAll()
-                
+                .requestMatchers("/api/v1/**").authenticated()
                 // --- THÊM DÒNG NÀY ĐỂ CHO PHÉP PREFLIGHT OPTIONS ---
                 .requestMatchers(HttpMethod.OPTIONS).permitAll()
                 // --- KẾT THÚC DÒNG MỚI ---

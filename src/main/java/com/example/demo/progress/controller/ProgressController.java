@@ -13,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 
 // --- CÁC IMPORT MỚI ---
@@ -27,6 +28,13 @@ import com.example.demo.community.dto.request.UpdateCommentRequest;
 import com.example.demo.community.dto.request.AddReactionRequest;
 import com.example.demo.community.dto.response.CommentResponse;
 // --- KẾT THÚC IMPORT MỚI ---
+import com.example.demo.progress.dto.response.LogResponseDto;
+import com.example.demo.progress.dto.response.MemberJourneyProgressDto;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/v1/plans/{shareableLink}/progress")
@@ -155,6 +163,38 @@ public class ProgressController {
         progressService.toggleReactionOnCheckIn(checkInEventId, request, userEmail);
         return ResponseEntity.ok().build(); // Trả về 200 OK (hoặc 201/204 tùy logic)
     }
+    
+ // Thêm vào trong class ProgressController
+    @GetMapping("/journey-path")
+    // SỬA LỖI: Thêm 'authentication.name' làm tham số thứ hai (email)
+    @PreAuthorize("@planSecurity.isMember(#shareableLink, authentication.name)") 
+    public ResponseEntity<List<MemberJourneyProgressDto>> getJourneyPath(
+            @PathVariable String shareableLink
+    ) {
+        List<MemberJourneyProgressDto> journeyPath = progressService.getJourneyPathData(shareableLink);
+        return ResponseEntity.ok(journeyPath);
+    }
+    
+//    @GetMapping("/feed/friends")
+//    public ResponseEntity<Page<LogResponseDto>> getFriendFeed(
+//            @RequestParam(defaultValue = "0") int page,
+//            @RequestParam(defaultValue = "10") int size) {
+//        
+//        Pageable pageable = PageRequest.of(page, size, Sort.by("checkInTimestamp").descending());
+//        Page<LogResponseDto> feedPage = progressService.getFriendFeed(pageable);
+//        return ResponseEntity.ok(feedPage);
+//    }
+//
+//    @GetMapping("/feed/user/{userId}")
+//    public ResponseEntity<Page<LogResponseDto>> getUserFeed(
+//            @PathVariable Long userId,
+//            @RequestParam(defaultValue = "0") int page,
+//            @RequestParam(defaultValue = "10") int size) {
+//        
+//        Pageable pageable = PageRequest.of(page, size, Sort.by("checkInTimestamp").descending());
+//        Page<LogResponseDto> feedPage = progressService.getUserFeed(userId, pageable);
+//        return ResponseEntity.ok(feedPage);
+//    }
 
     // --- CÁC ENDPOINT STATS/CHART CŨ (giữ nguyên) ---
 }

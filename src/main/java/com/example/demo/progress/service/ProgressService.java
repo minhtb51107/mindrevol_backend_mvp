@@ -4,6 +4,8 @@ package com.example.demo.progress.service;
 import com.example.demo.progress.dto.request.CheckInRequest;
 import com.example.demo.progress.dto.response.TimelineResponse;
 import com.example.demo.user.dto.response.UserStatsResponse;
+import com.example.demo.progress.dto.response.LogResponseDto;
+import com.example.demo.progress.dto.response.MemberJourneyProgressDto;
 import com.example.demo.progress.dto.response.ProgressChartDataResponse;
 
 // --- CÁC IMPORT MỚI ---
@@ -14,11 +16,13 @@ import com.example.demo.community.dto.request.AddReactionRequest;
 import com.example.demo.community.dto.request.PostCommentRequest;
 import com.example.demo.community.dto.request.UpdateCommentRequest;
 import com.example.demo.community.dto.response.CommentResponse;
-// --- KẾT THÚC IMPORT MỚI ---
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface ProgressService {
 
@@ -55,4 +59,17 @@ public interface ProgressService {
      */
     void toggleReactionOnCheckIn(Long checkInEventId, AddReactionRequest request, String userEmail);
 	Set<Long> getCompletedTaskIdsToday(String shareableLink, String userEmail);
+	
+	/**
+     * Lấy "Feed Tri Kỷ" (Logs từ bạn bè và chính mình)
+     */
+    Page<LogResponseDto> getFriendFeed(Pageable pageable);
+
+    /**
+     * Lấy feed "Log" của CHỈ MỘT người dùng (cho "Bảo tàng").
+     */
+    Page<LogResponseDto> getUserFeed(Long userId, Pageable pageable);
+    
+ // Thêm vào trong interface ProgressService
+    List<MemberJourneyProgressDto> getJourneyPathData(String shareableLink);
 }

@@ -26,6 +26,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,6 +59,20 @@ import com.example.demo.community.repository.ProgressReactionRepository;
 import java.time.Instant; // Dùng Instant cho comment
 import java.util.Optional;
 // --- KẾT THÚC IMPORT MỚI ---
+//... (import cũ)
+import com.example.demo.progress.dto.response.LogResponseDto;
+import com.example.demo.user.entity.Friendship;
+import com.example.demo.user.repository.FriendshipRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import java.util.ArrayList;
+import java.util.Objects;
+
+//Thêm các import này
+import com.example.demo.progress.dto.response.MemberJourneyProgressDto;
+import java.time.temporal.ChronoUnit;
+
 
 @Slf4j
 @Service
@@ -79,6 +95,7 @@ public class ProgressServiceImpl implements ProgressService {
     private final ProgressCommentRepository progressCommentRepository;
     private final ProgressReactionRepository progressReactionRepository;
     private final CommentMapper commentMapper; // Sẽ cần file này
+    private final FriendshipRepository friendshipRepository;
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final long EDIT_GRACE_PERIOD_HOURS = 24;
@@ -181,6 +198,61 @@ public class ProgressServiceImpl implements ProgressService {
         log.info("Sent WebSocket update to {} for new CheckInEvent ID {}", destination, savedEvent.getId());
         
         return response;
+    }
+    
+ // Thêm vào trong class ProgressServiceImpl
+ // Thêm vào trong class ProgressServiceImpl
+    @Override
+    public List<MemberJourneyProgressDto> getJourneyPathData(String shareableLink) {
+        // 1. Lấy plan bằng shareableLink
+        Plan plan = planRepository.findByShareableLink(shareableLink)
+                .orElseThrow(() -> new ResourceNotFoundException("Plan not found with link: " + shareableLink));
+
+        // 2. Lấy danh sách thành viên từ plan
+        List<PlanMember> members = plan.getMembers();
+
+        List<MemberJourneyProgressDto> dtoList = new ArrayList<>();
+        LocalDate planStartDate = plan.getStartDate(); //
+
+        // 3. Lặp qua từng thành viên
+        for (PlanMember member : members) {
+            User user = member.getUser();
+            
+            // 4. SỬA LỖI: Gọi đúng tên phương thức repository
+            Optional<CheckInEvent> latestLog = checkInEventRepository
+                    .findTopByPlanIdAndAuthorUserIdOrderByCheckInTimestampDesc(plan.getId(), user.getId());
+
+            int currentDay = 0;
+            if (latestLog.isPresent() && planStartDate != null) {
+                
+                // 5. SỬA LỖI: Logic tính toán
+                
+                // Lấy đúng trường 'checkInTimestamp' (kiểu LocalDateTime)
+                LocalDateTime logTimestamp = latestLog.get().getCheckInTimestamp();
+                
+                // Chuyển đổi LocalDateTime sang LocalDate để so sánh
+                LocalDate logDate = logTimestamp.toLocalDate();
+                
+                // Tính số ngày chênh lệch (giờ đã cùng kiểu LocalDate)
+                long daysBetween = ChronoUnit.DAYS.between(planStartDate, logDate);
+                currentDay = (int) daysBetween + 1; // Ngày 1 là ngày bắt đầu
+            }
+
+            if (currentDay < 0) {
+                currentDay = 0; // Đảm bảo không bị âm
+            }
+
+            // 6. Tạo DTO (phần này đã đúng)
+            MemberJourneyProgressDto dto = new MemberJourneyProgressDto();
+            dto.setUserId(user.getId()); //
+            dto.setFullName(user.getFullname()); //
+            dto.setPhotoUrl(user.getPhoto()); //
+            dto.setCurrentDay(currentDay);
+            
+            dtoList.add(dto);
+        }
+
+        return dtoList;
     }
     
  // (Thêm vào ProgressServiceImpl.java)
@@ -311,6 +383,82 @@ public class ProgressServiceImpl implements ProgressService {
         if (Duration.between(checkInTime, now).toHours() >= EDIT_GRACE_PERIOD_HOURS) {
             throw new BadRequestException("Check-in can no longer be modified after " + EDIT_GRACE_PERIOD_HOURS + " hours.");
         }
+    }
+    
+ // TRONG: ProgressServiceImpl.java
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<LogResponseDto> getFriendFeed(Pageable pageable) {
+        User currentUser = getCurrentUser();
+
+        List<Friendship> friendships = friendshipRepository.findAllAcceptedFriendships(currentUser);
+        
+        List<User> authorsToFetch = new ArrayList<>();
+        authorsToFetch.add(currentUser);
+
+        friendships.forEach(f -> {
+            authorsToFetch.add(f.getRequester().equals(currentUser) ? f.getReceiver() : f.getRequester());
+        });
+
+        Page<CheckInEvent> logEventsPage = checkInEventRepository.findByAuthorsInOrderByCheckInTimestampDesc(authorsToFetch, pageable);
+
+        // --- BẮT ĐẦU SỬA LỖI ---
+        
+        // DÒNG CŨ (Gây lỗi Lazy):
+        // return logEventsPage.map(event -> progressMapper.mapCheckInEventToLogResponseDto(event, currentUser));
+
+        // DÒNG MỚI (Sửa lỗi):
+        // Chuyển đổi (map) ngay lập tức khi session đang mở
+        List<LogResponseDto> dtos = logEventsPage.getContent().stream()
+                .map(event -> progressMapper.mapCheckInEventToLogResponseDto(event, currentUser))
+                .collect(Collectors.toList());
+
+        // Trả về một Page DTO mới
+        return new PageImpl<>(dtos, pageable, logEventsPage.getTotalElements());
+        
+        // --- KẾT THÚC SỬA LỖI ---
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public Page<LogResponseDto> getUserFeed(Long userId, Pageable pageable) {
+        User currentUser = getCurrentUser(); 
+        User targetUser = userRepository.findById(userId.intValue())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng."));
+
+        if (!Objects.equals(currentUser.getId(), targetUser.getId())) {
+             throw new BadRequestException("Bạn chỉ có thể xem 'Bảo tàng' của chính mình.");
+        }
+
+        List<User> authorsToFetch = List.of(targetUser);
+        Page<CheckInEvent> logEventsPage = checkInEventRepository.findByAuthorsInOrderByCheckInTimestampDesc(authorsToFetch, pageable);
+
+        // --- BẮT ĐẦU SỬA LỖI ---
+        
+        // DÒNG CŨ (Gây lỗi Lazy):
+        // return logEventsPage.map(event -> progressMapper.mapCheckInEventToLogResponseDto(event, currentUser));
+
+        // DÒNG MỚI (Sửa lỗi):
+        // Chuyển đổi (map) ngay lập tức khi session đang mở
+        List<LogResponseDto> dtos = logEventsPage.getContent().stream()
+                .map(event -> progressMapper.mapCheckInEventToLogResponseDto(event, currentUser))
+                .collect(Collectors.toList());
+
+        // Trả về một Page DTO mới
+        return new PageImpl<>(dtos, pageable, logEventsPage.getTotalElements());
+
+        // --- KẾT THÚC SỬA LỖI ---
+    }
+    
+    private User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new ResourceNotFoundException("No authenticated user found");
+        }
+        String email = authentication.getName();
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
     }
 
 
